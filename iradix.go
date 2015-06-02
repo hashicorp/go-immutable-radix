@@ -135,7 +135,8 @@ func (t *Tree) Len() int {
 }
 
 // Txn is a transaction on the tree. This transaction is applied
-// atomically and returns a new tree when committed.
+// atomically and returns a new tree when committed. A transaction
+// is not thread safe, and should only be used by a single goroutine.
 type Txn struct {
 	root     *node
 	size     int
@@ -277,6 +278,54 @@ func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface
 	return nc, nil, false
 }
 
+// delete does a recursive deletion
+func (t *Txn) delete(parent, n *node, search []byte) (*node, *leafNode) {
+	// Check for key exhaution
+	if len(search) == 0 {
+		if !n.isLeaf() {
+			return nil, nil
+		}
+
+		// Remove the leaf node
+		nc := t.writeNode(n)
+		nc.leaf = nil
+
+		// Check if this node should be merged
+		if n != t.root && len(nc.edges) == 1 {
+			nc.mergeChild()
+		}
+		return nc, n.leaf
+	}
+
+	// Look for an edge
+	label := search[0]
+	idx, child := n.getEdge(label)
+	if child == nil || !bytes.HasPrefix(search, child.prefix) {
+		return nil, nil
+	}
+
+	// Consume the search prefix
+	search = search[len(child.prefix):]
+	newChild, leaf := t.delete(n, child, search)
+	if newChild == nil {
+		return nil, nil
+	}
+
+	// Copy this node
+	nc := t.writeNode(n)
+
+	// Delete the edge if the node has no edges
+	if newChild.leaf == nil && len(newChild.edges) == 0 {
+		nc.delEdge(label)
+		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() {
+			nc.mergeChild()
+		}
+	} else {
+		nc.edges[idx].node = newChild
+	}
+	return nc, leaf
+}
+
 // Insert is used to add or update a given key. The return provides
 // the previous value and a bool indicating if any was set.
 func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
@@ -293,58 +342,15 @@ func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
 // Delete is used to delete a given key. Returns the old value if any,
 // and a bool indicating if the key was set.
 func (t *Txn) Delete(k []byte) (interface{}, bool) {
-	var parent *node
-	var label byte
-	n := t.root
-	search := k
-	for {
-		// Check for key exhaution
-		if len(search) == 0 {
-			if !n.isLeaf() {
-				break
-			}
-			goto DELETE
-		}
-
-		// Look for an edge
-		parent = n
-		label = search[0]
-		_, n = n.getEdge(label)
-		if n == nil {
-			break
-		}
-
-		// Consume the search prefix
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
-		} else {
-			break
-		}
+	newRoot, leaf := t.delete(nil, t.root, k)
+	if newRoot != nil {
+		t.root = newRoot
+	}
+	if leaf != nil {
+		t.size--
+		return leaf.val, true
 	}
 	return nil, false
-
-DELETE:
-	// Delete the leaf
-	leaf := n.leaf
-	n.leaf = nil
-	t.size--
-
-	// Check if we should delete this node from the parent
-	if parent != nil && len(n.edges) == 0 {
-		parent.delEdge(label)
-	}
-
-	// Check if we should merge this node
-	if n != t.root && len(n.edges) == 1 {
-		n.mergeChild()
-	}
-
-	// Check if we should merge the parent's other child
-	if parent != nil && parent != t.root && len(parent.edges) == 1 && !parent.isLeaf() {
-		parent.mergeChild()
-	}
-
-	return leaf.val, true
 }
 
 // Commit is used to finalize the transaction and return a new tree
