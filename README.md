@@ -13,6 +13,8 @@ As a radix tree, it provides the following:
 A tree supports using a transaction to batch multiple updates (insert, delete)
 in a more efficient manner than performing each operation one at a time.
 
+For a mutable variant, see [go-radix](https://github.com/armon/go-radix).
+
 Documentation
 =============
 
