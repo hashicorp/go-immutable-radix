@@ -73,36 +73,35 @@ func TestRadix(t *testing.T) {
 
 func TestRoot(t *testing.T) {
 	r := New()
-	_, _, ok := r.Delete(nil)
+	r, _, ok := r.Delete(nil)
 	if ok {
 		t.Fatalf("bad")
 	}
-	_, _, ok = r.Insert(nil, true)
+	r, _, ok = r.Insert(nil, true)
 	if ok {
 		t.Fatalf("bad")
 	}
 	val, ok := r.Get(nil)
 	if !ok || val != true {
-		t.Fatalf("bad: %v", val)
+		t.Fatalf("bad: %v %#v", val)
 	}
-	_, val, ok = r.Delete(nil)
+	r, val, ok = r.Delete(nil)
 	if !ok || val != true {
 		t.Fatalf("bad: %v", val)
 	}
 }
 
 func TestDelete(t *testing.T) {
-
 	r := New()
-
 	s := []string{"", "A", "AB"}
 
 	for _, ss := range s {
-		r.Insert([]byte(ss), true)
+		r, _, _ = r.Insert([]byte(ss), true)
 	}
 
+	var ok bool
 	for _, ss := range s {
-		_, _, ok := r.Delete([]byte(ss))
+		r, _, ok = r.Delete([]byte(ss))
 		if !ok {
 			t.Fatalf("bad %q", ss)
 		}

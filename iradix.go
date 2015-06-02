@@ -56,15 +56,15 @@ func (n *node) replaceEdge(e edge) {
 	panic("replacing missing edge")
 }
 
-func (n *node) getEdge(label byte) *node {
+func (n *node) getEdge(label byte) (int, *node) {
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
 		return n.edges[i].label >= label
 	})
 	if idx < num && n.edges[idx].label == label {
-		return n.edges[idx].node
+		return idx, n.edges[idx].node
 	}
-	return nil
+	return -1, nil
 }
 
 func (n *node) delEdge(label byte) {
@@ -151,98 +151,143 @@ func (t *Tree) Txn() *Txn {
 	return txn
 }
 
+// writeNode returns a ndoe to be modified, if the current
+// node as already been modified during the course of
+// the transaction, it is used in-place.
+func (t *Txn) writeNode(n *node) *node {
+	// Ensure the modified set exists
+	if t.modified == nil {
+		t.modified = make(map[*node]struct{})
+	}
+
+	// If this node has already been modified, we can
+	// continue to use it during this transaction.
+	if _, ok := t.modified[n]; ok {
+		return n
+	}
+
+	// Copy the existing node
+	nc := new(node)
+	nc.prefix = make([]byte, len(n.prefix))
+	copy(nc.prefix, n.prefix)
+	if n.leaf != nil {
+		nc.leaf = new(leafNode)
+		*nc.leaf = *n.leaf
+	}
+	if len(n.edges) != 0 {
+		nc.edges = make([]edge, len(n.edges))
+		copy(nc.edges, n.edges)
+	}
+
+	// Mark this node as modified
+	t.modified[nc] = struct{}{}
+	return nc
+}
+
+// insert does a recursive insertion
+func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface{}, bool) {
+	// Handle key exhaution
+	if len(search) == 0 {
+		nc := t.writeNode(n)
+		if n.isLeaf() {
+			old := nc.leaf.val
+			nc.leaf.val = v
+			return nc, old, true
+		} else {
+			nc.leaf = &leafNode{
+				key: k,
+				val: v,
+			}
+			return nc, nil, false
+		}
+	}
+
+	// Look for the edge
+	idx, child := n.getEdge(search[0])
+
+	// No edge, create one
+	if child == nil {
+		e := edge{
+			label: search[0],
+			node: &node{
+				leaf: &leafNode{
+					key: k,
+					val: v,
+				},
+				prefix: search,
+			},
+		}
+		nc := t.writeNode(n)
+		nc.addEdge(e)
+		return nc, nil, false
+	}
+
+	// Determine longest prefix of the search key on match
+	commonPrefix := longestPrefix(search, child.prefix)
+	if commonPrefix == len(child.prefix) {
+		search = search[commonPrefix:]
+		newChild, oldVal, didUpdate := t.insert(child, k, search, v)
+		if newChild != nil {
+			nc := t.writeNode(n)
+			nc.edges[idx].node = newChild
+			return nc, oldVal, didUpdate
+		}
+		return nil, oldVal, didUpdate
+	}
+
+	// Split the node
+	nc := t.writeNode(n)
+	splitNode := &node{
+		prefix: search[:commonPrefix],
+	}
+	nc.replaceEdge(edge{
+		label: search[0],
+		node:  splitNode,
+	})
+
+	// Restore the existing child node
+	modChild := t.writeNode(child)
+	splitNode.addEdge(edge{
+		label: modChild.prefix[commonPrefix],
+		node:  modChild,
+	})
+	modChild.prefix = modChild.prefix[commonPrefix:]
+
+	// Create a new leaf node
+	leaf := &leafNode{
+		key: k,
+		val: v,
+	}
+
+	// If the new key is a subset, add to to this node
+	search = search[commonPrefix:]
+	if len(search) == 0 {
+		splitNode.leaf = leaf
+		return nc, nil, false
+	}
+
+	// Create a new edge for the node
+	splitNode.addEdge(edge{
+		label: search[0],
+		node: &node{
+			leaf:   leaf,
+			prefix: search,
+		},
+	})
+	return nc, nil, false
+}
+
 // Insert is used to add or update a given key. The return provides
 // the previous value and a bool indicating if any was set.
 func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
-	var parent *node
-	n := t.root
-	search := k
-	for {
-		// Handle key exhaution
-		if len(search) == 0 {
-			if n.isLeaf() {
-				old := n.leaf.val
-				n.leaf.val = v
-				return old, true
-			} else {
-				n.leaf = &leafNode{
-					key: k,
-					val: v,
-				}
-				t.size++
-				return nil, false
-			}
-		}
-
-		// Look for the edge
-		parent = n
-		n = n.getEdge(search[0])
-
-		// No edge, create one
-		if n == nil {
-			e := edge{
-				label: search[0],
-				node: &node{
-					leaf: &leafNode{
-						key: k,
-						val: v,
-					},
-					prefix: search,
-				},
-			}
-			parent.addEdge(e)
-			t.size++
-			return nil, false
-		}
-
-		// Determine longest prefix of the search key on match
-		commonPrefix := longestPrefix(search, n.prefix)
-		if commonPrefix == len(n.prefix) {
-			search = search[commonPrefix:]
-			continue
-		}
-
-		// Split the node
-		t.size++
-		child := &node{
-			prefix: search[:commonPrefix],
-		}
-		parent.replaceEdge(edge{
-			label: search[0],
-			node:  child,
-		})
-
-		// Restore the existing node
-		child.addEdge(edge{
-			label: n.prefix[commonPrefix],
-			node:  n,
-		})
-		n.prefix = n.prefix[commonPrefix:]
-
-		// Create a new leaf node
-		leaf := &leafNode{
-			key: k,
-			val: v,
-		}
-
-		// If the new key is a subset, add to to this node
-		search = search[commonPrefix:]
-		if len(search) == 0 {
-			child.leaf = leaf
-			return nil, false
-		}
-
-		// Create a new edge for the node
-		child.addEdge(edge{
-			label: search[0],
-			node: &node{
-				leaf:   leaf,
-				prefix: search,
-			},
-		})
-		return nil, false
+	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, v)
+	if newRoot != nil {
+		t.root = newRoot
 	}
-	return nil, false
+	if !didUpdate {
+		t.size++
+	}
+	return oldVal, didUpdate
 }
 
 // Delete is used to delete a given key. Returns the old value if any,
@@ -264,7 +309,7 @@ func (t *Txn) Delete(k []byte) (interface{}, bool) {
 		// Look for an edge
 		parent = n
 		label = search[0]
-		n = n.getEdge(label)
+		_, n = n.getEdge(label)
 		if n == nil {
 			break
 		}
@@ -339,7 +384,7 @@ func (t *Tree) Get(k []byte) (interface{}, bool) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			break
 		}
@@ -372,7 +417,7 @@ func (t *Tree) LongestPrefix(k []byte) ([]byte, interface{}, bool) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			break
 		}
@@ -440,7 +485,7 @@ func (t *Tree) WalkPrefix(prefix []byte, fn WalkFn) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			break
 		}
@@ -479,7 +524,7 @@ func (t *Tree) WalkPath(path []byte, fn WalkFn) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			return
 		}
