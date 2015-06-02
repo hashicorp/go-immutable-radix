@@ -10,9 +10,8 @@ As a radix tree, it provides the following:
  * Minimum / Maximum value lookups
  * Ordered iteration
 
-As an immutable implementation, it provides a `Txn` that can be used to make
-multiple mutable updates (insert, delete) in a more efficient manner than one
-at a time.
+A tree supports using a transaction to batch multiple updates (insert, delete)
+in a more efficient manner than performing each operation one at a time.
 
 Documentation
 =============
