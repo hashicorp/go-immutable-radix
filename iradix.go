@@ -169,8 +169,10 @@ func (t *Txn) writeNode(n *node) *node {
 
 	// Copy the existing node
 	nc := new(node)
-	nc.prefix = make([]byte, len(n.prefix))
-	copy(nc.prefix, n.prefix)
+	if n.prefix != nil {
+		nc.prefix = make([]byte, len(n.prefix))
+		copy(nc.prefix, n.prefix)
+	}
 	if n.leaf != nil {
 		nc.leaf = new(leafNode)
 		*nc.leaf = *n.leaf

@@ -8,13 +8,39 @@ import (
 	"testing"
 )
 
-func NewFromMap(m map[string]interface{}) *Tree {
-	t := New()
-	txn := t.Txn()
-	for k, v := range m {
-		txn.Insert([]byte(k), v)
+func CopyTree(t *Tree) *Tree {
+	nt := &Tree{
+		root: CopyNode(t.root),
+		size: t.size,
 	}
-	return txn.Commit()
+	return nt
+}
+
+func CopyNode(n *node) *node {
+	nn := &node{}
+	if n.prefix != nil {
+		nn.prefix = make([]byte, len(n.prefix))
+		copy(nn.prefix, n.prefix)
+	}
+	if n.leaf != nil {
+		nn.leaf = CopyLeaf(n.leaf)
+	}
+	if len(n.edges) != 0 {
+		nn.edges = make([]edge, len(n.edges))
+		for idx, edge := range n.edges {
+			nn.edges[idx].label = edge.label
+			nn.edges[idx].node = CopyNode(edge.node)
+		}
+	}
+	return nn
+}
+
+func CopyLeaf(l *leafNode) *leafNode {
+	ll := &leafNode{
+		key: l.key,
+		val: l.val,
+	}
+	return ll
 }
 
 func TestRadix(t *testing.T) {
@@ -31,7 +57,19 @@ func TestRadix(t *testing.T) {
 		}
 	}
 
-	r := NewFromMap(inp)
+	r := New()
+	rCopy := CopyTree(r)
+	for k, v := range inp {
+		newR, _, _ := r.Insert([]byte(k), v)
+		if !reflect.DeepEqual(r, rCopy) {
+			t.Errorf("r: %#v rc: %#v", r, rCopy)
+			t.Errorf("r: %#v rc: %#v", r.root, rCopy.root)
+			t.Fatalf("structure modified %d", newR.Len())
+		}
+		r = newR
+		rCopy = CopyTree(r)
+	}
+
 	if r.Len() != len(inp) {
 		t.Fatalf("bad length: %v %v", r.Len(), len(inp))
 	}
@@ -56,6 +94,10 @@ func TestRadix(t *testing.T) {
 		t.Fatalf("bad maximum: %v %v", outMax, max)
 	}
 
+	// Copy the full tree before delete
+	orig := r
+	origCopy := CopyTree(r)
+
 	for k, v := range inp {
 		tree, out, ok := r.Delete([]byte(k))
 		r = tree
@@ -68,6 +110,10 @@ func TestRadix(t *testing.T) {
 	}
 	if r.Len() != 0 {
 		t.Fatalf("bad length: %v", r.Len())
+	}
+
+	if !reflect.DeepEqual(orig, origCopy) {
+		t.Fatalf("structure modified")
 	}
 }
 
