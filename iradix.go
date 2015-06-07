@@ -87,6 +87,33 @@ func (n *node) mergeChild() {
 	n.edges = child.edges
 }
 
+func (n *node) Get(k []byte) (interface{}, bool) {
+	search := k
+	for {
+		// Check for key exhaution
+		if len(search) == 0 {
+			if n.isLeaf() {
+				return n.leaf.val, true
+			}
+			break
+		}
+
+		// Look for an edge
+		_, n = n.getEdge(search[0])
+		if n == nil {
+			break
+		}
+
+		// Consume the search prefix
+		if bytes.HasPrefix(search, n.prefix) {
+			search = search[len(n.prefix):]
+		} else {
+			break
+		}
+	}
+	return nil, false
+}
+
 // concat two byte slices, returning a third new copy
 func concat(a, b []byte) []byte {
 	c := make([]byte, len(a)+len(b))
@@ -355,6 +382,12 @@ func (t *Txn) Delete(k []byte) (interface{}, bool) {
 	return nil, false
 }
 
+// Get is used to lookup a specific key, returning
+// the value and if it was found
+func (t *Txn) Get(k []byte) (interface{}, bool) {
+	return t.root.Get(k)
+}
+
 // Commit is used to finalize the transaction and return a new tree
 func (t *Txn) Commit() *Tree {
 	t.modified = nil
@@ -380,31 +413,7 @@ func (t *Tree) Delete(k []byte) (*Tree, interface{}, bool) {
 // Get is used to lookup a specific key, returning
 // the value and if it was found
 func (t *Tree) Get(k []byte) (interface{}, bool) {
-	n := t.root
-	search := k
-	for {
-		// Check for key exhaution
-		if len(search) == 0 {
-			if n.isLeaf() {
-				return n.leaf.val, true
-			}
-			break
-		}
-
-		// Look for an edge
-		_, n = n.getEdge(search[0])
-		if n == nil {
-			break
-		}
-
-		// Consume the search prefix
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
-		} else {
-			break
-		}
-	}
-	return nil, false
+	return t.root.Get(k)
 }
 
 // LongestPrefix is like Get, but instead of an
