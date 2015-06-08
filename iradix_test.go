@@ -16,8 +16,8 @@ func CopyTree(t *Tree) *Tree {
 	return nt
 }
 
-func CopyNode(n *node) *node {
-	nn := &node{}
+func CopyNode(n *Node) *Node {
+	nn := &Node{}
 	if n.prefix != nil {
 		nn.prefix = make([]byte, len(n.prefix))
 		copy(nn.prefix, n.prefix)
@@ -85,11 +85,11 @@ func TestRadix(t *testing.T) {
 	}
 
 	// Check min and max
-	outMin, _, _ := r.Minimum()
+	outMin, _, _ := r.Root().Minimum()
 	if string(outMin) != min {
 		t.Fatalf("bad minimum: %v %v", outMin, min)
 	}
-	outMax, _, _ := r.Maximum()
+	outMax, _, _ := r.Root().Maximum()
 	if string(outMax) != max {
 		t.Fatalf("bad maximum: %v %v", outMax, max)
 	}
@@ -191,8 +191,9 @@ func TestLongestPrefix(t *testing.T) {
 		{"foozip", "foozip"},
 		{"foozipzap", "foozip"},
 	}
+	root := r.Root()
 	for _, test := range cases {
-		m, _, ok := r.LongestPrefix([]byte(test.inp))
+		m, _, ok := root.LongestPrefix([]byte(test.inp))
 		if !ok {
 			t.Fatalf("no match: %v", test)
 		}
@@ -266,13 +267,14 @@ func TestWalkPrefix(t *testing.T) {
 		},
 	}
 
+	root := r.Root()
 	for _, test := range cases {
 		out := []string{}
 		fn := func(k []byte, v interface{}) bool {
 			out = append(out, string(k))
 			return false
 		}
-		r.WalkPrefix([]byte(test.inp), fn)
+		root.WalkPrefix([]byte(test.inp), fn)
 		sort.Strings(out)
 		sort.Strings(test.out)
 		if !reflect.DeepEqual(out, test.out) {
@@ -338,13 +340,14 @@ func TestWalkPath(t *testing.T) {
 		},
 	}
 
+	root := r.Root()
 	for _, test := range cases {
 		out := []string{}
 		fn := func(k []byte, v interface{}) bool {
 			out = append(out, string(k))
 			return false
 		}
-		r.WalkPath([]byte(test.inp), fn)
+		root.WalkPath([]byte(test.inp), fn)
 		sort.Strings(out)
 		sort.Strings(test.out)
 		if !reflect.DeepEqual(out, test.out) {

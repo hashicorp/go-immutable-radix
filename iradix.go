@@ -1,144 +1,6 @@
 package iradix
 
-import (
-	"bytes"
-	"sort"
-)
-
-// WalkFn is used when walking the tree. Takes a
-// key and value, returning if iteration should
-// be terminated.
-type WalkFn func(k []byte, v interface{}) bool
-
-// leafNode is used to represent a value
-type leafNode struct {
-	key []byte
-	val interface{}
-}
-
-// edge is used to represent an edge node
-type edge struct {
-	label byte
-	node  *node
-}
-
-type node struct {
-	// leaf is used to store possible leaf
-	leaf *leafNode
-
-	// prefix is the common prefix we ignore
-	prefix []byte
-
-	// Edges should be stored in-order for iteration.
-	// We avoid a fully materialized slice to save memory,
-	// since in most cases we expect to be sparse
-	edges edges
-}
-
-func (n *node) isLeaf() bool {
-	return n.leaf != nil
-}
-
-func (n *node) addEdge(e edge) {
-	n.edges = append(n.edges, e)
-	n.edges.Sort()
-}
-
-func (n *node) replaceEdge(e edge) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= e.label
-	})
-	if idx < num && n.edges[idx].label == e.label {
-		n.edges[idx].node = e.node
-		return
-	}
-	panic("replacing missing edge")
-}
-
-func (n *node) getEdge(label byte) (int, *node) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= label
-	})
-	if idx < num && n.edges[idx].label == label {
-		return idx, n.edges[idx].node
-	}
-	return -1, nil
-}
-
-func (n *node) delEdge(label byte) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= label
-	})
-	if idx < num && n.edges[idx].label == label {
-		copy(n.edges[idx:], n.edges[idx+1:])
-		n.edges[len(n.edges)-1] = edge{}
-		n.edges = n.edges[:len(n.edges)-1]
-	}
-}
-
-func (n *node) mergeChild() {
-	e := n.edges[0]
-	child := e.node
-	n.prefix = concat(n.prefix, child.prefix)
-	n.leaf = child.leaf
-	n.edges = child.edges
-}
-
-func (n *node) Get(k []byte) (interface{}, bool) {
-	search := k
-	for {
-		// Check for key exhaution
-		if len(search) == 0 {
-			if n.isLeaf() {
-				return n.leaf.val, true
-			}
-			break
-		}
-
-		// Look for an edge
-		_, n = n.getEdge(search[0])
-		if n == nil {
-			break
-		}
-
-		// Consume the search prefix
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
-		} else {
-			break
-		}
-	}
-	return nil, false
-}
-
-// concat two byte slices, returning a third new copy
-func concat(a, b []byte) []byte {
-	c := make([]byte, len(a)+len(b))
-	copy(c, a)
-	copy(c[len(a):], b)
-	return c
-}
-
-type edges []edge
-
-func (e edges) Len() int {
-	return len(e)
-}
-
-func (e edges) Less(i, j int) bool {
-	return e[i].label < e[j].label
-}
-
-func (e edges) Swap(i, j int) {
-	e[i], e[j] = e[j], e[i]
-}
-
-func (e edges) Sort() {
-	sort.Sort(e)
-}
+import "bytes"
 
 // Tree implements an immutable radix tree. This can be treated as a
 // Dictionary abstract data type. The main advantage over a standard
@@ -146,13 +8,13 @@ func (e edges) Sort() {
 // means that it is safe to concurrently read from a Tree without any
 // coordination.
 type Tree struct {
-	root *node
+	root *Node
 	size int
 }
 
 // New returns an empty Tree
 func New() *Tree {
-	t := &Tree{root: &node{}}
+	t := &Tree{root: &Node{}}
 	return t
 }
 
@@ -165,9 +27,9 @@ func (t *Tree) Len() int {
 // atomically and returns a new tree when committed. A transaction
 // is not thread safe, and should only be used by a single goroutine.
 type Txn struct {
-	root     *node
+	root     *Node
 	size     int
-	modified map[*node]struct{}
+	modified map[*Node]struct{}
 }
 
 // Txn starts a new transaction that can be used to mutate the tree
@@ -182,10 +44,10 @@ func (t *Tree) Txn() *Txn {
 // writeNode returns a ndoe to be modified, if the current
 // node as already been modified during the course of
 // the transaction, it is used in-place.
-func (t *Txn) writeNode(n *node) *node {
+func (t *Txn) writeNode(n *Node) *Node {
 	// Ensure the modified set exists
 	if t.modified == nil {
-		t.modified = make(map[*node]struct{})
+		t.modified = make(map[*Node]struct{})
 	}
 
 	// If this node has already been modified, we can
@@ -195,7 +57,7 @@ func (t *Txn) writeNode(n *node) *node {
 	}
 
 	// Copy the existing node
-	nc := new(node)
+	nc := new(Node)
 	if n.prefix != nil {
 		nc.prefix = make([]byte, len(n.prefix))
 		copy(nc.prefix, n.prefix)
@@ -215,7 +77,7 @@ func (t *Txn) writeNode(n *node) *node {
 }
 
 // insert does a recursive insertion
-func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface{}, bool) {
+func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface{}, bool) {
 	// Handle key exhaution
 	if len(search) == 0 {
 		nc := t.writeNode(n)
@@ -239,7 +101,7 @@ func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface
 	if child == nil {
 		e := edge{
 			label: search[0],
-			node: &node{
+			node: &Node{
 				leaf: &leafNode{
 					key: k,
 					val: v,
@@ -267,7 +129,7 @@ func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface
 
 	// Split the node
 	nc := t.writeNode(n)
-	splitNode := &node{
+	splitNode := &Node{
 		prefix: search[:commonPrefix],
 	}
 	nc.replaceEdge(edge{
@@ -299,7 +161,7 @@ func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface
 	// Create a new edge for the node
 	splitNode.addEdge(edge{
 		label: search[0],
-		node: &node{
+		node: &Node{
 			leaf:   leaf,
 			prefix: search,
 		},
@@ -308,7 +170,7 @@ func (t *Txn) insert(n *node, k, search []byte, v interface{}) (*node, interface
 }
 
 // delete does a recursive deletion
-func (t *Txn) delete(parent, n *node, search []byte) (*node, *leafNode) {
+func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 	// Check for key exhaution
 	if len(search) == 0 {
 		if !n.isLeaf() {
@@ -382,10 +244,11 @@ func (t *Txn) Delete(k []byte) (interface{}, bool) {
 	return nil, false
 }
 
-// Get is used to lookup a specific key, returning
-// the value and if it was found
-func (t *Txn) Get(k []byte) (interface{}, bool) {
-	return t.root.Get(k)
+// Root returns the current root of the radix tree within this
+// transaction. The root is not safe across insert and delete operations,
+// but can be used to read the current state during a transaction.
+func (t *Txn) Root() *Node {
+	return t.root
 }
 
 // Commit is used to finalize the transaction and return a new tree
@@ -410,166 +273,16 @@ func (t *Tree) Delete(k []byte) (*Tree, interface{}, bool) {
 	return txn.Commit(), old, ok
 }
 
+// Root returns the root node of the tree which can be used for richer
+// query operations.
+func (t *Tree) Root() *Node {
+	return t.root
+}
+
 // Get is used to lookup a specific key, returning
 // the value and if it was found
 func (t *Tree) Get(k []byte) (interface{}, bool) {
 	return t.root.Get(k)
-}
-
-// LongestPrefix is like Get, but instead of an
-// exact match, it will return the longest prefix match.
-func (t *Tree) LongestPrefix(k []byte) ([]byte, interface{}, bool) {
-	var last *leafNode
-	n := t.root
-	search := k
-	for {
-		// Look for a leaf node
-		if n.isLeaf() {
-			last = n.leaf
-		}
-
-		// Check for key exhaution
-		if len(search) == 0 {
-			break
-		}
-
-		// Look for an edge
-		_, n = n.getEdge(search[0])
-		if n == nil {
-			break
-		}
-
-		// Consume the search prefix
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
-		} else {
-			break
-		}
-	}
-	if last != nil {
-		return last.key, last.val, true
-	}
-	return nil, nil, false
-}
-
-// Minimum is used to return the minimum value in the tree
-func (t *Tree) Minimum() ([]byte, interface{}, bool) {
-	n := t.root
-	for {
-		if n.isLeaf() {
-			return n.leaf.key, n.leaf.val, true
-		}
-		if len(n.edges) > 0 {
-			n = n.edges[0].node
-		} else {
-			break
-		}
-	}
-	return nil, nil, false
-}
-
-// Maximum is used to return the maximum value in the tree
-func (t *Tree) Maximum() ([]byte, interface{}, bool) {
-	n := t.root
-	for {
-		if num := len(n.edges); num > 0 {
-			n = n.edges[num-1].node
-			continue
-		}
-		if n.isLeaf() {
-			return n.leaf.key, n.leaf.val, true
-		} else {
-			break
-		}
-	}
-	return nil, nil, false
-}
-
-// Walk is used to walk the tree
-func (t *Tree) Walk(fn WalkFn) {
-	recursiveWalk(t.root, fn)
-}
-
-// WalkPrefix is used to walk the tree under a prefix
-func (t *Tree) WalkPrefix(prefix []byte, fn WalkFn) {
-	n := t.root
-	search := prefix
-	for {
-		// Check for key exhaution
-		if len(search) == 0 {
-			recursiveWalk(n, fn)
-			return
-		}
-
-		// Look for an edge
-		_, n = n.getEdge(search[0])
-		if n == nil {
-			break
-		}
-
-		// Consume the search prefix
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
-
-		} else if bytes.HasPrefix(n.prefix, search) {
-			// Child may be under our search prefix
-			recursiveWalk(n, fn)
-			return
-		} else {
-			break
-		}
-	}
-
-}
-
-// WalkPath is used to walk the tree, but only visiting nodes
-// from the root down to a given leaf. Where WalkPrefix walks
-// all the entries *under* the given prefix, this walks the
-// entries *above* the given prefix.
-func (t *Tree) WalkPath(path []byte, fn WalkFn) {
-	n := t.root
-	search := path
-	for {
-		// Visit the leaf values if any
-		if n.leaf != nil && fn(n.leaf.key, n.leaf.val) {
-			return
-		}
-
-		// Check for key exhaution
-		if len(search) == 0 {
-			return
-		}
-
-		// Look for an edge
-		_, n = n.getEdge(search[0])
-		if n == nil {
-			return
-		}
-
-		// Consume the search prefix
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
-		} else {
-			break
-		}
-	}
-}
-
-// recursiveWalk is used to do a pre-order walk of a node
-// recursively. Returns true if the walk should be aborted
-func recursiveWalk(n *node, fn WalkFn) bool {
-	// Visit the leaf values if any
-	if n.leaf != nil && fn(n.leaf.key, n.leaf.val) {
-		return true
-	}
-
-	// Recurse on the children
-	for _, e := range n.edges {
-		if recursiveWalk(e.node, fn) {
-			return true
-		}
-	}
-	return false
 }
 
 // longestPrefix finds the length of the shared prefix
@@ -586,4 +299,12 @@ func longestPrefix(k1, k2 []byte) int {
 		}
 	}
 	return i
+}
+
+// concat two byte slices, returning a third new copy
+func concat(a, b []byte) []byte {
+	c := make([]byte, len(a)+len(b))
+	copy(c, a)
+	copy(c[len(a):], b)
+	return c
 }
