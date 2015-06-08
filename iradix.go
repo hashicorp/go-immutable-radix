@@ -251,6 +251,12 @@ func (t *Txn) Root() *Node {
 	return t.root
 }
 
+// Get is used to lookup a specific key, returning
+// the value and if it was found
+func (t *Txn) Get(k []byte) (interface{}, bool) {
+	return t.root.Get(k)
+}
+
 // Commit is used to finalize the transaction and return a new tree
 func (t *Txn) Commit() *Tree {
 	t.modified = nil
