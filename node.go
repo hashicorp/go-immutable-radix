@@ -181,6 +181,12 @@ func (n *Node) Maximum() ([]byte, interface{}, bool) {
 	return nil, nil, false
 }
 
+// Iterator is used to return an iterator at
+// the given node to walk the tree
+func (n *Node) Iterator() *Iterator {
+	return &Iterator{node: n}
+}
+
 // Walk is used to walk the tree
 func (n *Node) Walk(fn WalkFn) {
 	recursiveWalk(n, fn)
@@ -214,7 +220,6 @@ func (n *Node) WalkPrefix(prefix []byte, fn WalkFn) {
 			break
 		}
 	}
-
 }
 
 // WalkPath is used to walk the tree, but only visiting nodes
