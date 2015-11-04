@@ -584,6 +584,117 @@ func TestMergeChildVisibility(t *testing.T) {
 	}
 }
 
+func TestNotifyMutate_SeekPrefixWatch(t *testing.T) {
+	r := New()
+
+	keys := []string{
+		"foo/bar/baz",
+		"foo/baz/bar",
+		"foo/zip/zap",
+		"foobar",
+		"zipzap",
+	}
+	for _, k := range keys {
+		r, _, _ = r.Insert([]byte(k), nil)
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	iter := r.Root().Iterator()
+	rootWatch := iter.SeekPrefixWatch([]byte("nope"))
+
+	iter = r.Root().Iterator()
+	parentWatch := iter.SeekPrefixWatch([]byte("foo"))
+
+	iter = r.Root().Iterator()
+	leafWatch := iter.SeekPrefixWatch([]byte("foobar"))
+
+	iter = r.Root().Iterator()
+	missingWatch := iter.SeekPrefixWatch([]byte("foobarbaz"))
+
+	iter = r.Root().Iterator()
+	otherWatch := iter.SeekPrefixWatch([]byte("foo/b"))
+
+	// Write to a sub-child should trigger the leaf!
+	txn := r.Txn()
+	txn.NotifyMutate(true)
+	txn.Insert([]byte("foobarbaz"), nil)
+	r = txn.Commit()
+
+	// Verify root and parent triggered, not leaf affected
+	select {
+	case <-rootWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-parentWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-leafWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-missingWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-otherWatch:
+		t.Fatalf("bad")
+	default:
+	}
+
+	iter = r.Root().Iterator()
+	rootWatch = iter.SeekPrefixWatch([]byte("nope"))
+
+	iter = r.Root().Iterator()
+	parentWatch = iter.SeekPrefixWatch([]byte("foo"))
+
+	iter = r.Root().Iterator()
+	leafWatch = iter.SeekPrefixWatch([]byte("foobar"))
+
+	iter = r.Root().Iterator()
+	missingWatch = iter.SeekPrefixWatch([]byte("foobarbaz"))
+
+	// Delete to a sub-child should not trigger the leaf!
+	txn = r.Txn()
+	txn.NotifyMutate(true)
+	txn.Delete([]byte("foobarbaz"))
+	r = txn.Commit()
+
+	// Verify root and parent triggered, not leaf affected
+	select {
+	case <-rootWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-parentWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-leafWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-missingWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-otherWatch:
+		t.Fatalf("bad")
+	default:
+	}
+}
+
 func TestNotifyMutate_GetWatch(t *testing.T) {
 	r := New()
 
