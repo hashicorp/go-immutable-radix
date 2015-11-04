@@ -43,6 +43,10 @@ type Txn struct {
 	root     *Node
 	size     int
 	modified *simplelru.LRU
+
+	mutatedNode  map[*Node]struct{}
+	mutatedLeaf  map[*leafNode]struct{}
+	notifyMutate bool
 }
 
 // Txn starts a new transaction that can be used to mutate the tree
@@ -52,6 +56,17 @@ func (t *Tree) Txn() *Txn {
 		size: t.size,
 	}
 	return txn
+}
+
+// NotifyMutate can be used to toggle if mutation cause a notification
+// to the affected nodes. This must be enabled before any modifications are
+// made within the transaction.
+func (t *Txn) NotifyMutate(notify bool) error {
+	if len(t.modified) > 0 && notify {
+		return fmt.Errorf("transaction already in progress")
+	}
+	t.notifyMutate = notify
+	return nil
 }
 
 // writeNode returns a node to be modified, if the current
@@ -73,15 +88,23 @@ func (t *Txn) writeNode(n *Node) *Node {
 		return n
 	}
 
+	// Mark this node as being mutated
+	if t.notifyMutate {
+		if t.mutatedNode == nil {
+			t.mutatedNode = make(map[*Node]struct{})
+		}
+		t.mutatedNode[n] = struct{}{}
+	}
+
 	// Copy the existing node
 	nc := new(Node)
+	nc.mutateCh = make(chan struct{})
 	if n.prefix != nil {
 		nc.prefix = make([]byte, len(n.prefix))
 		copy(nc.prefix, n.prefix)
 	}
 	if n.leaf != nil {
-		nc.leaf = new(leafNode)
-		*nc.leaf = *n.leaf
+		nc.leaf = n.leaf
 	}
 	if len(n.edges) != 0 {
 		nc.edges = make([]edge, len(n.edges))
@@ -93,20 +116,32 @@ func (t *Txn) writeNode(n *Node) *Node {
 	return nc
 }
 
+// mutateLeaf is used to mark a leaf as being mutated
+// for the purposes of notification.
+func (t *Txn) mutateLeaf(leaf *leafNode) {
+	if !t.notifyMutate {
+		return
+	}
+	if t.mutatedLeaf == nil {
+		t.mutatedLeaf = make(map[*leafNode]struct{})
+	}
+	t.mutatedLeaf[leaf] = struct{}{}
+}
+
 // insert does a recursive insertion
 func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface{}, bool) {
 	// Handle key exhaution
 	if len(search) == 0 {
 		nc := t.writeNode(n)
+		nc.leaf = &leafNode{
+			mutateCh: make(chan struct{}),
+			key:      k,
+			val:      v,
+		}
 		if n.isLeaf() {
-			old := nc.leaf.val
-			nc.leaf.val = v
-			return nc, old, true
+			t.mutateLeaf(n.leaf)
+			return nc, n.leaf.val, true
 		} else {
-			nc.leaf = &leafNode{
-				key: k,
-				val: v,
-			}
 			return nc, nil, false
 		}
 	}
@@ -119,9 +154,11 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		e := edge{
 			label: search[0],
 			node: &Node{
+				mutateCh: make(chan struct{}),
 				leaf: &leafNode{
-					key: k,
-					val: v,
+					mutateCh: make(chan struct{}),
+					key:      k,
+					val:      v,
 				},
 				prefix: search,
 			},
@@ -147,7 +184,8 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	// Split the node
 	nc := t.writeNode(n)
 	splitNode := &Node{
-		prefix: search[:commonPrefix],
+		mutateCh: make(chan struct{}),
+		prefix:   search[:commonPrefix],
 	}
 	nc.replaceEdge(edge{
 		label: search[0],
@@ -164,8 +202,9 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 
 	// Create a new leaf node
 	leaf := &leafNode{
-		key: k,
-		val: v,
+		mutateCh: make(chan struct{}),
+		key:      k,
+		val:      v,
 	}
 
 	// If the new key is a subset, add to to this node
@@ -179,8 +218,9 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	splitNode.addEdge(edge{
 		label: search[0],
 		node: &Node{
-			leaf:   leaf,
-			prefix: search,
+			mutateCh: make(chan struct{}),
+			leaf:     leaf,
+			prefix:   search,
 		},
 	})
 	return nc, nil, false
@@ -197,6 +237,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 		// Remove the leaf node
 		nc := t.writeNode(n)
 		nc.leaf = nil
+		t.mutateLeaf(n.leaf)
 
 		// Check if this node should be merged
 		if n != t.root && len(nc.edges) == 1 {
@@ -276,8 +317,19 @@ func (t *Txn) Get(k []byte) (interface{}, bool) {
 
 // Commit is used to finalize the transaction and return a new tree
 func (t *Txn) Commit() *Tree {
+	nt := &Tree{t.root, t.size}
+	if t.notifyMutate {
+		for leaf := range t.mutatedLeaf {
+			close(leaf.mutateCh)
+		}
+		for node := range t.mutatedNode {
+			close(node.mutateCh)
+		}
+	}
 	t.modified = nil
-	return &Tree{t.root, t.size}
+	t.mutatedNode = nil
+	t.mutatedLeaf = nil
+	return nt
 }
 
 // Insert is used to add or update a given key. The return provides
