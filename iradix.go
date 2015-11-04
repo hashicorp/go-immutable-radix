@@ -315,6 +315,12 @@ func (t *Txn) Get(k []byte) (interface{}, bool) {
 	return t.root.Get(k)
 }
 
+// GetWatch is used to lookup a specific key, returning
+// the watch channel, value and if it was found
+func (t *Txn) GetWatch(k []byte) (<-chan struct{}, interface{}, bool) {
+	return t.root.GetWatch(k)
+}
+
 // Commit is used to finalize the transaction and return a new tree
 func (t *Txn) Commit() *Tree {
 	nt := &Tree{t.root, t.size}
