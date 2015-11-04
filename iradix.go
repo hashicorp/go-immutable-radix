@@ -27,7 +27,11 @@ type Tree struct {
 
 // New returns an empty Tree
 func New() *Tree {
-	t := &Tree{root: &Node{}}
+	t := &Tree{
+		root: &Node{
+			mutateCh: make(chan struct{}),
+		},
+	}
 	return t
 }
 
