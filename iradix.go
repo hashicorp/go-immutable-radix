@@ -48,9 +48,9 @@ type Txn struct {
 	size     int
 	modified *simplelru.LRU
 
-	mutatedNode  map[*Node]struct{}
-	mutatedLeaf  map[*leafNode]struct{}
-	notifyMutate bool
+	mutatedNode map[*Node]struct{}
+	mutatedLeaf map[*leafNode]struct{}
+	trackMutate bool
 }
 
 // Txn starts a new transaction that can be used to mutate the tree
@@ -62,15 +62,12 @@ func (t *Tree) Txn() *Txn {
 	return txn
 }
 
-// TrackMutate can be used to toggle if mutation cause a notification
-// to the affected nodes. This must be enabled before any modifications are
-// made within the transaction.
-func (t *Txn) TrackMutate(notify bool) error {
-	if len(t.modified) > 0 && notify {
-		return fmt.Errorf("transaction already in progress")
-	}
-	t.notifyMutate = notify
-	return nil
+// TrackMutate can be used to toggle if mutations are tracked.
+// This is used with Notify to cause a notification to the affected
+// internal nodes and leaves. Mutations made before enabling tracking
+// will not be notified.
+func (t *Txn) TrackMutate(track bool) {
+	t.trackMutate = track
 }
 
 // writeNode returns a node to be modified, if the current
@@ -93,7 +90,7 @@ func (t *Txn) writeNode(n *Node) *Node {
 	}
 
 	// Mark this node as being mutated
-	if t.notifyMutate {
+	if t.trackMutate {
 		if t.mutatedNode == nil {
 			t.mutatedNode = make(map[*Node]struct{})
 		}
@@ -123,7 +120,7 @@ func (t *Txn) writeNode(n *Node) *Node {
 // mutateLeaf is used to mark a leaf as being mutated
 // for the purposes of notification.
 func (t *Txn) mutateLeaf(leaf *leafNode) {
-	if !t.notifyMutate {
+	if !t.trackMutate {
 		return
 	}
 	if t.mutatedLeaf == nil {
@@ -335,13 +332,11 @@ func (t *Txn) Commit() *Tree {
 // Notify is used along with TrackMutate to trigger notifications.
 // It should only be invoked after the transaction has been committed.
 func (t *Txn) Notify() {
-	if t.notifyMutate {
-		for leaf := range t.mutatedLeaf {
-			close(leaf.mutateCh)
-		}
-		for node := range t.mutatedNode {
-			close(node.mutateCh)
-		}
+	for leaf := range t.mutatedLeaf {
+		close(leaf.mutateCh)
+	}
+	for node := range t.mutatedNode {
+		close(node.mutateCh)
 	}
 	t.mutatedNode = nil
 	t.mutatedLeaf = nil
