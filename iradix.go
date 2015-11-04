@@ -62,10 +62,10 @@ func (t *Tree) Txn() *Txn {
 	return txn
 }
 
-// NotifyMutate can be used to toggle if mutation cause a notification
+// TrackMutate can be used to toggle if mutation cause a notification
 // to the affected nodes. This must be enabled before any modifications are
 // made within the transaction.
-func (t *Txn) NotifyMutate(notify bool) error {
+func (t *Txn) TrackMutate(notify bool) error {
 	if len(t.modified) > 0 && notify {
 		return fmt.Errorf("transaction already in progress")
 	}
@@ -332,7 +332,7 @@ func (t *Txn) Commit() *Tree {
 	return nt
 }
 
-// Notify is used along with NotifyMutate to trigger notifications.
+// Notify is used along with TrackMutate to trigger notifications.
 // It should only be invoked after the transaction has been committed.
 func (t *Txn) Notify() {
 	if t.notifyMutate {

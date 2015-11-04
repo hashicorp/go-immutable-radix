@@ -584,7 +584,7 @@ func TestMergeChildVisibility(t *testing.T) {
 	}
 }
 
-func TestNotifyMutate_SeekPrefixWatch(t *testing.T) {
+func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 	r := New()
 
 	keys := []string{
@@ -618,7 +618,7 @@ func TestNotifyMutate_SeekPrefixWatch(t *testing.T) {
 
 	// Write to a sub-child should trigger the leaf!
 	txn := r.Txn()
-	txn.NotifyMutate(true)
+	txn.TrackMutate(true)
 	txn.Insert([]byte("foobarbaz"), nil)
 	r = txn.Commit()
 	txn.Notify()
@@ -664,7 +664,7 @@ func TestNotifyMutate_SeekPrefixWatch(t *testing.T) {
 
 	// Delete to a sub-child should not trigger the leaf!
 	txn = r.Txn()
-	txn.NotifyMutate(true)
+	txn.TrackMutate(true)
 	txn.Delete([]byte("foobarbaz"))
 	r = txn.Commit()
 	txn.Notify()
@@ -697,7 +697,7 @@ func TestNotifyMutate_SeekPrefixWatch(t *testing.T) {
 	}
 }
 
-func TestNotifyMutate_GetWatch(t *testing.T) {
+func TestTrackMutate_GetWatch(t *testing.T) {
 	r := New()
 
 	keys := []string{
@@ -739,7 +739,7 @@ func TestNotifyMutate_GetWatch(t *testing.T) {
 
 	// Write to a sub-child should not trigger the leaf!
 	txn := r.Txn()
-	txn.NotifyMutate(true)
+	txn.TrackMutate(true)
 	txn.Insert([]byte("foobarbaz"), nil)
 	r = txn.Commit()
 	txn.Notify()
@@ -779,7 +779,7 @@ func TestNotifyMutate_GetWatch(t *testing.T) {
 
 	// Write to a exactly leaf should trigger the leaf!
 	txn = r.Txn()
-	txn.NotifyMutate(true)
+	txn.TrackMutate(true)
 	txn.Insert([]byte("foobar"), nil)
 	r = txn.Commit()
 	txn.Notify()
@@ -826,7 +826,7 @@ func TestNotifyMutate_GetWatch(t *testing.T) {
 
 	// Delete to a sub-child should not trigger the leaf!
 	txn = r.Txn()
-	txn.NotifyMutate(true)
+	txn.TrackMutate(true)
 	txn.Delete([]byte("foobarbaz"))
 	r = txn.Commit()
 	txn.Notify()
@@ -866,7 +866,7 @@ func TestNotifyMutate_GetWatch(t *testing.T) {
 
 	// Write to a exactly leaf should trigger the leaf!
 	txn = r.Txn()
-	txn.NotifyMutate(true)
+	txn.TrackMutate(true)
 	txn.Delete([]byte("foobar"))
 	r = txn.Commit()
 	txn.Notify()
