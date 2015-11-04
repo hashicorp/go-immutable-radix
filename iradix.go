@@ -328,6 +328,13 @@ func (t *Txn) GetWatch(k []byte) (<-chan struct{}, interface{}, bool) {
 // Commit is used to finalize the transaction and return a new tree
 func (t *Txn) Commit() *Tree {
 	nt := &Tree{t.root, t.size}
+	t.modified = nil
+	return nt
+}
+
+// Notify is used along with NotifyMutate to trigger notifications.
+// It should only be invoked after the transaction has been committed.
+func (t *Txn) Notify() {
 	if t.notifyMutate {
 		for leaf := range t.mutatedLeaf {
 			close(leaf.mutateCh)
@@ -336,10 +343,8 @@ func (t *Txn) Commit() *Tree {
 			close(node.mutateCh)
 		}
 	}
-	t.modified = nil
 	t.mutatedNode = nil
 	t.mutatedLeaf = nil
-	return nt
 }
 
 // Insert is used to add or update a given key. The return provides
