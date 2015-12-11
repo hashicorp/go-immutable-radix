@@ -9,12 +9,17 @@ type Iterator struct {
 	stack []edges
 }
 
-// SeekPrefix is used to seek the iterator to a given prefix
+// SeekPrefix is used to seek the iterator to a given prefix.
 func (i *Iterator) SeekPrefix(prefix []byte) {
+	i.SeekPartialPrefix(prefix, true)
+}
+
+// SeekCommonPrefix is used to seek the iterator to a given partial prefix.
+func (i *Iterator) SeekPartialPrefix(prefix []byte, exactMatch bool) {
 	// Wipe the stack
 	i.stack = nil
 	n := i.node
-	search := prefix
+	search := bytes.Trim(prefix, "\x00")
 	for {
 		// Check for key exhaution
 		if len(search) == 0 {
@@ -38,6 +43,11 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 			return
 		} else {
 			i.node = nil
+			// Return the current node in case we are not looking for an
+			// exact match.
+			if !exactMatch && bytes.HasPrefix(n.prefix, search) {
+				i.node = n
+			}
 			return
 		}
 	}
