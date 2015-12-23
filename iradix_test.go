@@ -456,6 +456,75 @@ func TestIteratePrefix(t *testing.T) {
 	}
 }
 
+func TestMergeChildVisibility(t *testing.T) {
+	r := New()
+	r, _, _ = r.Insert([]byte("foobar"), 42)
+	r, _, _ = r.Insert([]byte("foobaz"), 43)
+	r, _, _ = r.Insert([]byte("foozip"), 10)
+
+	txn1 := r.Txn()
+	txn2 := r.Txn()
+
+	// Ensure we get the expected value foobar and foobaz
+	if val, ok := txn1.Get([]byte("foobar")); !ok || val != 42 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn1.Get([]byte("foobaz")); !ok || val != 43 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn2.Get([]byte("foobar")); !ok || val != 42 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn2.Get([]byte("foobaz")); !ok || val != 43 {
+		t.Fatalf("bad: %v", val)
+	}
+
+	// Delete of foozip will cause a merge child between the
+	// "foo" and "ba" nodes.
+	if val, ok := txn2.Delete([]byte("foozip")); !ok || val != 10 {
+		t.Fatalf("bad: %v", val)
+	}
+
+	// Insert of "foobaz" will update the slice of the "fooba" node
+	// in-place to point to the new "foobaz" node. This in-place update
+	// will cause the visibility of the update to leak into txn1 (prior
+	// to the fix).
+	if val, ok := txn2.Insert([]byte("foobaz"), 44); !ok || val != 43 {
+		t.Fatalf("bad: %v", val)
+	}
+
+	// Ensure we get the expected value foobar and foobaz
+	if val, ok := txn1.Get([]byte("foobar")); !ok || val != 42 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn1.Get([]byte("foobaz")); !ok || val != 43 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn2.Get([]byte("foobar")); !ok || val != 42 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn2.Get([]byte("foobaz")); !ok || val != 44 {
+		t.Fatalf("bad: %v", val)
+	}
+
+	// Commit txn2
+	r = txn2.Commit()
+
+	// Ensure we get the expected value foobar and foobaz
+	if val, ok := txn1.Get([]byte("foobar")); !ok || val != 42 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := txn1.Get([]byte("foobaz")); !ok || val != 43 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := r.Get([]byte("foobar")); !ok || val != 42 {
+		t.Fatalf("bad: %v", val)
+	}
+	if val, ok := r.Get([]byte("foobaz")); !ok || val != 44 {
+		t.Fatalf("bad: %v", val)
+	}
+}
+
 // generateUUID is used to generate a random UUID
 func generateUUID() string {
 	buf := make([]byte, 16)

@@ -84,8 +84,14 @@ func (n *Node) mergeChild() {
 	e := n.edges[0]
 	child := e.node
 	n.prefix = concat(n.prefix, child.prefix)
-	n.leaf = child.leaf
-	n.edges = child.edges
+	if child.leaf != nil {
+		n.leaf = new(leafNode)
+		*n.leaf = *child.leaf
+	}
+	if len(child.edges) != 0 {
+		n.edges = make([]edge, len(child.edges))
+		copy(n.edges, child.edges)
+	}
 }
 
 func (n *Node) Get(k []byte) (interface{}, bool) {
