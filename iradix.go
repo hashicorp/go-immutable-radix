@@ -41,7 +41,7 @@ func (t *Tree) Txn() *Txn {
 	return txn
 }
 
-// writeNode returns a ndoe to be modified, if the current
+// writeNode returns a node to be modified, if the current
 // node as already been modified during the course of
 // the transaction, it is used in-place.
 func (t *Txn) writeNode(n *Node) *Node {
