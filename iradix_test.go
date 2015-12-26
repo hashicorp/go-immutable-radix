@@ -456,6 +456,28 @@ func TestIteratePrefix(t *testing.T) {
 	}
 }
 
+func TestMergeChildNilEdges(t *testing.T) {
+	r := New()
+	r, _, _ = r.Insert([]byte("foobar"), 42)
+	r, _, _ = r.Insert([]byte("foozip"), 43)
+	r, _, _ = r.Delete([]byte("foobar"))
+
+	root := r.Root()
+	out := []string{}
+	fn := func(k []byte, v interface{}) bool {
+		out = append(out, string(k))
+		return false
+	}
+	root.Walk(fn)
+
+	expect := []string{"foozip"}
+	sort.Strings(out)
+	sort.Strings(expect)
+	if !reflect.DeepEqual(out, expect) {
+		t.Fatalf("mis-match: %v %v", out, expect)
+	}
+}
+
 func TestMergeChildVisibility(t *testing.T) {
 	r := New()
 	r, _, _ = r.Insert([]byte("foobar"), 42)

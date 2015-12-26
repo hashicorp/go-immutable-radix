@@ -87,10 +87,14 @@ func (n *Node) mergeChild() {
 	if child.leaf != nil {
 		n.leaf = new(leafNode)
 		*n.leaf = *child.leaf
+	} else {
+		n.leaf = nil
 	}
 	if len(child.edges) != 0 {
 		n.edges = make([]edge, len(child.edges))
 		copy(n.edges, child.edges)
+	} else {
+		n.edges = nil
 	}
 }
 
