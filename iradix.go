@@ -8,7 +8,7 @@ import (
 
 const (
 	// defaultModifiedCache is the default size of the modified node
-	// cache used in per transaction. This is used to cache the updates
+	// cache used per transaction. This is used to cache the updates
 	// to the nodes near the root, while the leaves do not need to be
 	// cached. This is important for very large transactions to prevent
 	// the modified cache from growing to be enormous.
