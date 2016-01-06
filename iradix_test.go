@@ -1,11 +1,11 @@
 package iradix
 
 import (
-	crand "crypto/rand"
-	"fmt"
 	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/hashicorp/uuid"
 )
 
 func CopyTree(t *Tree) *Tree {
@@ -43,11 +43,44 @@ func CopyLeaf(l *leafNode) *leafNode {
 	return ll
 }
 
+func TestRadix_HugeTxn(t *testing.T) {
+	r := New()
+
+	// Insert way more nodes than the cache can fit
+	txn1 := r.Txn()
+	var expect []string
+	for i := 0; i < defaultModifiedCache*100; i++ {
+		gen := uuid.GenerateUUID()
+		txn1.Insert([]byte(gen), i)
+		expect = append(expect, gen)
+	}
+	r = txn1.Commit()
+	sort.Strings(expect)
+
+	// Collect the output, should be sorted
+	var out []string
+	fn := func(k []byte, v interface{}) bool {
+		out = append(out, string(k))
+		return false
+	}
+	r.Root().Walk(fn)
+
+	// Verify the match
+	if len(out) != len(expect) {
+		t.Fatalf("length mis-match: %d vs %d", len(out), len(expect))
+	}
+	for i := 0; i < len(out); i++ {
+		if out[i] != expect[i] {
+			t.Fatalf("mis-match: %v %v", out[i], expect[i])
+		}
+	}
+}
+
 func TestRadix(t *testing.T) {
 	var min, max string
 	inp := make(map[string]interface{})
 	for i := 0; i < 1000; i++ {
-		gen := generateUUID()
+		gen := uuid.GenerateUUID()
 		inp[gen] = i
 		if gen < min || i == 0 {
 			min = gen
@@ -545,19 +578,4 @@ func TestMergeChildVisibility(t *testing.T) {
 	if val, ok := r.Get([]byte("foobaz")); !ok || val != 44 {
 		t.Fatalf("bad: %v", val)
 	}
-}
-
-// generateUUID is used to generate a random UUID
-func generateUUID() string {
-	buf := make([]byte, 16)
-	if _, err := crand.Read(buf); err != nil {
-		panic(fmt.Errorf("failed to read random bytes: %v", err))
-	}
-
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%12x",
-		buf[0:4],
-		buf[4:6],
-		buf[6:8],
-		buf[8:10],
-		buf[10:16])
 }
