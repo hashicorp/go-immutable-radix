@@ -70,11 +70,12 @@ func (t *Txn) TrackMutate(track bool) {
 	t.trackMutate = track
 }
 
-// writeNode returns a node to be modified, if the current
-// node as already been modified during the course of
-// the transaction, it is used in-place.
-func (t *Txn) writeNode(n *Node) *Node {
-	// Ensure the modified set exists
+// writeNode returns a node to be modified, if the current node as already been
+// modified during the course of the transaction, it is used in-place. Set
+// forLeafUpdate to true if you are getting a write node to update the leaf,
+// which will set leaf mutation tracking appropriately as well.
+func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
+	// Ensure the modified set exists.
 	if t.modified == nil {
 		lru, err := simplelru.NewLRU(defaultModifiedCache, nil)
 		if err != nil {
@@ -83,13 +84,16 @@ func (t *Txn) writeNode(n *Node) *Node {
 		t.modified = lru
 	}
 
-	// If this node has already been modified, we can
-	// continue to use it during this transaction.
+	// If this node has already been modified, we can continue to use it
+	// during this transaction. If a node gets kicked out of cache then we
+	// may notify for its leaf changes if we end up copying the node again,
+	// but we don't make any guarantees about notifying for leaves that
+	// change multiple times *within* a transaction.
 	if _, ok := t.modified.Get(n); ok {
 		return n
 	}
 
-	// Mark this node as being mutated
+	// Mark this node as being mutated.
 	if t.trackMutate {
 		if t.mutatedNode == nil {
 			t.mutatedNode = make(map[*Node]struct{})
@@ -97,50 +101,44 @@ func (t *Txn) writeNode(n *Node) *Node {
 		t.mutatedNode[n] = struct{}{}
 	}
 
-	// Copy the existing node
-	nc := new(Node)
-	nc.mutateCh = make(chan struct{})
+	// Mark its leaf as being mutated, if appropriate.
+	if t.trackMutate && forLeafUpdate && n.leaf != nil {
+		if t.mutatedLeaf == nil {
+			t.mutatedLeaf = make(map[*leafNode]struct{})
+		}
+		t.mutatedLeaf[n.leaf] = struct{}{}
+	}
+
+	// Copy the existing node.
+	nc := &Node{
+		mutateCh: make(chan struct{}),
+		leaf:     n.leaf,
+	}
 	if n.prefix != nil {
 		nc.prefix = make([]byte, len(n.prefix))
 		copy(nc.prefix, n.prefix)
-	}
-	if n.leaf != nil {
-		nc.leaf = n.leaf
 	}
 	if len(n.edges) != 0 {
 		nc.edges = make([]edge, len(n.edges))
 		copy(nc.edges, n.edges)
 	}
 
-	// Mark this node as modified
+	// Mark this node as modified.
 	t.modified.Add(nc, nil)
 	return nc
 }
 
-// mutateLeaf is used to mark a leaf as being mutated
-// for the purposes of notification.
-func (t *Txn) mutateLeaf(leaf *leafNode) {
-	if !t.trackMutate {
-		return
-	}
-	if t.mutatedLeaf == nil {
-		t.mutatedLeaf = make(map[*leafNode]struct{})
-	}
-	t.mutatedLeaf[leaf] = struct{}{}
-}
-
 // insert does a recursive insertion
 func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface{}, bool) {
-	// Handle key exhaution
+	// Handle key exhaustion
 	if len(search) == 0 {
-		nc := t.writeNode(n)
+		nc := t.writeNode(n, true)
 		nc.leaf = &leafNode{
 			mutateCh: make(chan struct{}),
 			key:      k,
 			val:      v,
 		}
 		if n.isLeaf() {
-			t.mutateLeaf(n.leaf)
 			return nc, n.leaf.val, true
 		} else {
 			return nc, nil, false
@@ -164,7 +162,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 				prefix: search,
 			},
 		}
-		nc := t.writeNode(n)
+		nc := t.writeNode(n, false)
 		nc.addEdge(e)
 		return nc, nil, false
 	}
@@ -175,7 +173,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		search = search[commonPrefix:]
 		newChild, oldVal, didUpdate := t.insert(child, k, search, v)
 		if newChild != nil {
-			nc := t.writeNode(n)
+			nc := t.writeNode(n, false)
 			nc.edges[idx].node = newChild
 			return nc, oldVal, didUpdate
 		}
@@ -183,7 +181,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	}
 
 	// Split the node
-	nc := t.writeNode(n)
+	nc := t.writeNode(n, false)
 	splitNode := &Node{
 		mutateCh: make(chan struct{}),
 		prefix:   search[:commonPrefix],
@@ -194,7 +192,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	})
 
 	// Restore the existing child node
-	modChild := t.writeNode(child)
+	modChild := t.writeNode(child, false)
 	splitNode.addEdge(edge{
 		label: modChild.prefix[commonPrefix],
 		node:  modChild,
@@ -236,9 +234,8 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 		}
 
 		// Remove the leaf node
-		nc := t.writeNode(n)
+		nc := t.writeNode(n, true)
 		nc.leaf = nil
-		t.mutateLeaf(n.leaf)
 
 		// Check if this node should be merged
 		if n != t.root && len(nc.edges) == 1 {
@@ -262,7 +259,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 	}
 
 	// Copy this node
-	nc := t.writeNode(n)
+	nc := t.writeNode(n, false)
 
 	// Delete the edge if the node has no edges
 	if newChild.leaf == nil && len(newChild.edges) == 0 {
