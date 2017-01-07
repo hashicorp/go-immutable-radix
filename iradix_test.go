@@ -174,6 +174,26 @@ func TestRoot(t *testing.T) {
 	}
 }
 
+func TestInsert_UpdateFeedback(t *testing.T) {
+	r := New()
+	txn1 := r.Txn()
+
+	for i := 0; i < 10; i++ {
+		var old interface{}
+		var didUpdate bool
+		old, didUpdate = txn1.Insert([]byte("helloworld"), i)
+		if i == 0 {
+			if old != nil || didUpdate {
+				t.Fatalf("bad: %d %v %v", i, old, didUpdate)
+			}
+		} else {
+			if old == nil || old.(int) != i-1 || !didUpdate {
+				t.Fatalf("bad: %d %v %v", i, old, didUpdate)
+			}
+		}
+	}
+}
+
 func TestDelete(t *testing.T) {
 	r := New()
 	s := []string{"", "A", "AB"}

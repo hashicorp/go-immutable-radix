@@ -132,17 +132,20 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface{}, bool) {
 	// Handle key exhaustion
 	if len(search) == 0 {
+		var oldVal interface{}
+		var didUpdate bool
+		if n.isLeaf() {
+			oldVal = n.leaf.val
+			didUpdate = true
+		}
+
 		nc := t.writeNode(n, true)
 		nc.leaf = &leafNode{
 			mutateCh: make(chan struct{}),
 			key:      k,
 			val:      v,
 		}
-		if n.isLeaf() {
-			return nc, n.leaf.val, true
-		} else {
-			return nc, nil, false
-		}
+		return nc, oldVal, didUpdate
 	}
 
 	// Look for the edge
