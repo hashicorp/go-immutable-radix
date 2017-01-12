@@ -217,6 +217,14 @@ func (n *Node) Iterator() *Iterator {
 	return &Iterator{node: n}
 }
 
+// rawIterator is used to return a raw iterator at the given node to walk the
+// tree.
+func (n *Node) rawIterator() *rawIterator {
+	iter := &rawIterator{node: n}
+	iter.Next()
+	return iter
+}
+
 // Walk is used to walk the tree
 func (n *Node) Walk(fn WalkFn) {
 	recursiveWalk(n, fn)

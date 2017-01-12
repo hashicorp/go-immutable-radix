@@ -912,3 +912,27 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 	default:
 	}
 }
+
+func TestTrackMutate_HugeTxn(t *testing.T) {
+	r := New()
+
+	keys := []string{
+		"foo/",
+		"foo/b",
+		"foo/bar",
+		"foot",
+		"football",
+	}
+	for _, k := range keys {
+		r, _, _ = r.Insert([]byte(k), nil)
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	txn := r.Txn()
+	txn.TrackMutate(true)
+	txn.Insert([]byte("foobarbaz"), nil)
+	r = txn.Commit()
+	txn.slowNotify()
+}
