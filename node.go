@@ -113,7 +113,7 @@ func (n *Node) GetWatch(k []byte) (<-chan struct{}, interface{}, bool) {
 	search := k
 	watch := n.mutateCh
 	for {
-		// Check for key exhaution
+		// Check for key exhaustion
 		if len(search) == 0 {
 			if n.isLeaf() {
 				return n.leaf.mutateCh, n.leaf.val, true
