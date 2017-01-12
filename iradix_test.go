@@ -1,6 +1,7 @@
 package iradix
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -605,119 +606,343 @@ func TestMergeChildVisibility(t *testing.T) {
 }
 
 func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
-	r := New()
+	for i := 0; i < 2; i++ {
+		r := New()
 
-	keys := []string{
-		"foo/bar/baz",
-		"foo/baz/bar",
-		"foo/zip/zap",
-		"foobar",
-		"zipzap",
-	}
-	for _, k := range keys {
-		r, _, _ = r.Insert([]byte(k), nil)
-	}
-	if r.Len() != len(keys) {
-		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
-	}
+		keys := []string{
+			"foo/bar/baz",
+			"foo/baz/bar",
+			"foo/zip/zap",
+			"foobar",
+			"zipzap",
+		}
+		for _, k := range keys {
+			r, _, _ = r.Insert([]byte(k), nil)
+		}
+		if r.Len() != len(keys) {
+			t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+		}
 
-	iter := r.Root().Iterator()
-	rootWatch := iter.SeekPrefixWatch([]byte("nope"))
+		iter := r.Root().Iterator()
+		rootWatch := iter.SeekPrefixWatch([]byte("nope"))
 
-	iter = r.Root().Iterator()
-	parentWatch := iter.SeekPrefixWatch([]byte("foo"))
+		iter = r.Root().Iterator()
+		parentWatch := iter.SeekPrefixWatch([]byte("foo"))
 
-	iter = r.Root().Iterator()
-	leafWatch := iter.SeekPrefixWatch([]byte("foobar"))
+		iter = r.Root().Iterator()
+		leafWatch := iter.SeekPrefixWatch([]byte("foobar"))
 
-	iter = r.Root().Iterator()
-	missingWatch := iter.SeekPrefixWatch([]byte("foobarbaz"))
+		iter = r.Root().Iterator()
+		missingWatch := iter.SeekPrefixWatch([]byte("foobarbaz"))
 
-	iter = r.Root().Iterator()
-	otherWatch := iter.SeekPrefixWatch([]byte("foo/b"))
+		iter = r.Root().Iterator()
+		otherWatch := iter.SeekPrefixWatch([]byte("foo/b"))
 
-	// Write to a sub-child should trigger the leaf!
-	txn := r.Txn()
-	txn.TrackMutate(true)
-	txn.Insert([]byte("foobarbaz"), nil)
-	r = txn.Commit()
-	txn.Notify()
+		// Write to a sub-child should trigger the leaf!
+		txn := r.Txn()
+		txn.TrackMutate(true)
+		txn.Insert([]byte("foobarbaz"), nil)
+		r = txn.Commit()
+		if i == 0 {
+			txn.Notify()
+		} else {
+			txn.slowNotify()
+		}
 
-	// Verify root and parent triggered, not leaf affected
-	select {
-	case <-rootWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-parentWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-leafWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-missingWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-otherWatch:
-		t.Fatalf("bad")
-	default:
-	}
+		// Verify root and parent triggered, and leaf affected
+		select {
+		case <-rootWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-parentWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-leafWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-missingWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-otherWatch:
+			t.Fatalf("bad")
+		default:
+		}
 
-	iter = r.Root().Iterator()
-	rootWatch = iter.SeekPrefixWatch([]byte("nope"))
+		iter = r.Root().Iterator()
+		rootWatch = iter.SeekPrefixWatch([]byte("nope"))
 
-	iter = r.Root().Iterator()
-	parentWatch = iter.SeekPrefixWatch([]byte("foo"))
+		iter = r.Root().Iterator()
+		parentWatch = iter.SeekPrefixWatch([]byte("foo"))
 
-	iter = r.Root().Iterator()
-	leafWatch = iter.SeekPrefixWatch([]byte("foobar"))
+		iter = r.Root().Iterator()
+		leafWatch = iter.SeekPrefixWatch([]byte("foobar"))
 
-	iter = r.Root().Iterator()
-	missingWatch = iter.SeekPrefixWatch([]byte("foobarbaz"))
+		iter = r.Root().Iterator()
+		missingWatch = iter.SeekPrefixWatch([]byte("foobarbaz"))
 
-	// Delete to a sub-child should not trigger the leaf!
-	txn = r.Txn()
-	txn.TrackMutate(true)
-	txn.Delete([]byte("foobarbaz"))
-	r = txn.Commit()
-	txn.Notify()
+		// Delete to a sub-child should trigger the leaf!
+		txn = r.Txn()
+		txn.TrackMutate(true)
+		txn.Delete([]byte("foobarbaz"))
+		r = txn.Commit()
+		if i == 0 {
+			txn.Notify()
+		} else {
+			txn.slowNotify()
+		}
 
-	// Verify root and parent triggered, not leaf affected
-	select {
-	case <-rootWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-parentWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-leafWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-missingWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-otherWatch:
-		t.Fatalf("bad")
-	default:
+		// Verify root and parent triggered, and leaf affected
+		select {
+		case <-rootWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-parentWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-leafWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-missingWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-otherWatch:
+			t.Fatalf("bad")
+		default:
+		}
 	}
 }
 
 func TestTrackMutate_GetWatch(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		r := New()
+
+		keys := []string{
+			"foo/bar/baz",
+			"foo/baz/bar",
+			"foo/zip/zap",
+			"foobar",
+			"zipzap",
+		}
+		for _, k := range keys {
+			r, _, _ = r.Insert([]byte(k), nil)
+		}
+		if r.Len() != len(keys) {
+			t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+		}
+
+		rootWatch, _, ok := r.Root().GetWatch(nil)
+		if rootWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		parentWatch, _, ok := r.Root().GetWatch([]byte("foo"))
+		if parentWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		leafWatch, _, ok := r.Root().GetWatch([]byte("foobar"))
+		if !ok {
+			t.Fatalf("should be found")
+		}
+		if leafWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		otherWatch, _, ok := r.Root().GetWatch([]byte("foo/b"))
+		if otherWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		// Write to a sub-child should not trigger the leaf!
+		txn := r.Txn()
+		txn.TrackMutate(true)
+		txn.Insert([]byte("foobarbaz"), nil)
+		r = txn.Commit()
+		if i == 0 {
+			txn.Notify()
+		} else {
+			txn.slowNotify()
+		}
+
+		// Verify root and parent triggered, not leaf affected
+		select {
+		case <-rootWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-parentWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-leafWatch:
+			t.Fatalf("bad")
+		default:
+		}
+		select {
+		case <-otherWatch:
+			t.Fatalf("bad")
+		default:
+		}
+
+		// Setup new watchers
+		rootWatch, _, ok = r.Root().GetWatch(nil)
+		if rootWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
+		if parentWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		// Write to a exactly leaf should trigger the leaf!
+		txn = r.Txn()
+		txn.TrackMutate(true)
+		txn.Insert([]byte("foobar"), nil)
+		r = txn.Commit()
+		if i == 0 {
+			txn.Notify()
+		} else {
+			txn.slowNotify()
+		}
+
+		select {
+		case <-rootWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-parentWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-leafWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-otherWatch:
+			t.Fatalf("bad")
+		default:
+		}
+
+		// Setup all the watchers again
+		rootWatch, _, ok = r.Root().GetWatch(nil)
+		if rootWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
+		if parentWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		leafWatch, _, ok = r.Root().GetWatch([]byte("foobar"))
+		if !ok {
+			t.Fatalf("should be found")
+		}
+		if leafWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		// Delete to a sub-child should not trigger the leaf!
+		txn = r.Txn()
+		txn.TrackMutate(true)
+		txn.Delete([]byte("foobarbaz"))
+		r = txn.Commit()
+		if i == 0 {
+			txn.Notify()
+		} else {
+			txn.slowNotify()
+		}
+
+		// Verify root and parent triggered, not leaf affected
+		select {
+		case <-rootWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-parentWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-leafWatch:
+			t.Fatalf("bad")
+		default:
+		}
+		select {
+		case <-otherWatch:
+			t.Fatalf("bad")
+		default:
+		}
+
+		// Setup new watchers
+		rootWatch, _, ok = r.Root().GetWatch(nil)
+		if rootWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
+		if parentWatch == nil {
+			t.Fatalf("bad")
+		}
+
+		// Write to a exactly leaf should trigger the leaf!
+		txn = r.Txn()
+		txn.TrackMutate(true)
+		txn.Delete([]byte("foobar"))
+		r = txn.Commit()
+		if i == 0 {
+			txn.Notify()
+		} else {
+			txn.slowNotify()
+		}
+
+		select {
+		case <-rootWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-parentWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-leafWatch:
+		default:
+			t.Fatalf("bad")
+		}
+		select {
+		case <-otherWatch:
+			t.Fatalf("bad")
+		default:
+		}
+	}
+}
+
+func TestTrackMutate_HugeTxn(t *testing.T) {
 	r := New()
 
 	keys := []string{
@@ -725,12 +950,20 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		"foo/baz/bar",
 		"foo/zip/zap",
 		"foobar",
-		"zipzap",
+		"nochange",
+	}
+	for i := 0; i < defaultModifiedCache; i++ {
+		key := fmt.Sprintf("aaa%d", i)
+		r, _, _ = r.Insert([]byte(key), nil)
 	}
 	for _, k := range keys {
 		r, _, _ = r.Insert([]byte(k), nil)
 	}
-	if r.Len() != len(keys) {
+	for i := 0; i < defaultModifiedCache; i++ {
+		key := fmt.Sprintf("zzz%d", i)
+		r, _, _ = r.Insert([]byte(key), nil)
+	}
+	if r.Len() != len(keys)+2*defaultModifiedCache {
 		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
 	}
 
@@ -752,187 +985,84 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		t.Fatalf("bad")
 	}
 
-	otherWatch, _, ok := r.Root().GetWatch([]byte("foo/b"))
-	if otherWatch == nil {
-		t.Fatalf("bad")
-	}
-
-	// Write to a sub-child should not trigger the leaf!
-	txn := r.Txn()
-	txn.TrackMutate(true)
-	txn.Insert([]byte("foobarbaz"), nil)
-	r = txn.Commit()
-	txn.Notify()
-
-	// Verify root and parent triggered, not leaf affected
-	select {
-	case <-rootWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-parentWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-leafWatch:
-		t.Fatalf("bad")
-	default:
-	}
-	select {
-	case <-otherWatch:
-		t.Fatalf("bad")
-	default:
-	}
-
-	// Setup new watchers
-	rootWatch, _, ok = r.Root().GetWatch(nil)
-	if rootWatch == nil {
-		t.Fatalf("bad")
-	}
-
-	parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
-	if parentWatch == nil {
-		t.Fatalf("bad")
-	}
-
-	// Write to a exactly leaf should trigger the leaf!
-	txn = r.Txn()
-	txn.TrackMutate(true)
-	txn.Insert([]byte("foobar"), nil)
-	r = txn.Commit()
-	txn.Notify()
-
-	select {
-	case <-rootWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-parentWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-leafWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-otherWatch:
-		t.Fatalf("bad")
-	default:
-	}
-
-	// Setup all the watchers again
-	rootWatch, _, ok = r.Root().GetWatch(nil)
-	if rootWatch == nil {
-		t.Fatalf("bad")
-	}
-
-	parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
-	if parentWatch == nil {
-		t.Fatalf("bad")
-	}
-
-	leafWatch, _, ok = r.Root().GetWatch([]byte("foobar"))
+	nopeWatch, _, ok := r.Root().GetWatch([]byte("nochange"))
 	if !ok {
 		t.Fatalf("should be found")
 	}
-	if leafWatch == nil {
+	if nopeWatch == nil {
 		t.Fatalf("bad")
 	}
 
-	// Delete to a sub-child should not trigger the leaf!
-	txn = r.Txn()
-	txn.TrackMutate(true)
-	txn.Delete([]byte("foobarbaz"))
-	r = txn.Commit()
-	txn.Notify()
-
-	// Verify root and parent triggered, not leaf affected
-	select {
-	case <-rootWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-parentWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-leafWatch:
-		t.Fatalf("bad")
-	default:
-	}
-	select {
-	case <-otherWatch:
-		t.Fatalf("bad")
-	default:
-	}
-
-	// Setup new watchers
-	rootWatch, _, ok = r.Root().GetWatch(nil)
-	if rootWatch == nil {
+	beforeWatch, _, ok := r.Root().GetWatch([]byte("aaa123"))
+	if beforeWatch == nil {
 		t.Fatalf("bad")
 	}
 
-	parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
-	if parentWatch == nil {
+	afterWatch, _, ok := r.Root().GetWatch([]byte("zzz123"))
+	if afterWatch == nil {
 		t.Fatalf("bad")
 	}
 
-	// Write to a exactly leaf should trigger the leaf!
-	txn = r.Txn()
-	txn.TrackMutate(true)
-	txn.Delete([]byte("foobar"))
-	r = txn.Commit()
-	txn.Notify()
-
-	select {
-	case <-rootWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-parentWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-leafWatch:
-	default:
-		t.Fatalf("bad")
-	}
-	select {
-	case <-otherWatch:
-		t.Fatalf("bad")
-	default:
-	}
-}
-
-func TestTrackMutate_HugeTxn(t *testing.T) {
-	r := New()
-
-	keys := []string{
-		"foo/",
-		"foo/b",
-		"foo/bar",
-		"foot",
-		"football",
-	}
-	for _, k := range keys {
-		r, _, _ = r.Insert([]byte(k), nil)
-	}
-	if r.Len() != len(keys) {
-		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
-	}
-
+	// Start the transaction.
 	txn := r.Txn()
 	txn.TrackMutate(true)
+
+	// Add new nodes on both sides of the tree and delete enough nodes to
+	// overflow the tracking.
+	txn.Insert([]byte("aaa"), nil)
+	for i := 0; i < defaultModifiedCache; i++ {
+		key := fmt.Sprintf("aaa%d", i)
+		txn.Delete([]byte(key))
+	}
+	for i := 0; i < defaultModifiedCache; i++ {
+		key := fmt.Sprintf("zzz%d", i)
+		txn.Delete([]byte(key))
+	}
+	txn.Insert([]byte("zzz"), nil)
+
+	// Hit the leaf, and add a child so we make multiple mutations to the
+	// same node.
+	txn.Insert([]byte("foobar"), nil)
 	txn.Insert([]byte("foobarbaz"), nil)
+
+	// Commit and make sure we overflowed but didn't take on extra stuff.
 	r = txn.Commit()
-	txn.slowNotify()
+	if !txn.trackOverflow || len(txn.trackChannels) != defaultModifiedCache {
+		t.Fatalf("bad")
+	}
+
+	// Now do the trigger.
+	txn.Notify()
+
+	// Verify the watches fired as expected.
+	select {
+	case <-rootWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-parentWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-leafWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-nopeWatch:
+		t.Fatalf("bad")
+	default:
+	}
+	select {
+	case <-beforeWatch:
+	default:
+		t.Fatalf("bad")
+	}
+	select {
+	case <-afterWatch:
+	default:
+		t.Fatalf("bad")
+	}
 }
