@@ -176,7 +176,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	// Handle key exhaustion
 	if len(search) == 0 {
 		var oldVal interface{}
-		var didUpdate bool
+		didUpdate := false
 		if n.isLeaf() {
 			oldVal = n.leaf.val
 			didUpdate = true
