@@ -86,9 +86,9 @@ func (t *Tree) Txn() *Txn {
 	return txn
 }
 
-// TrackMutate can be used to toggle if mutations are tracked. This is used with
-// Notify to cause a notification to the affected internal nodes and leaves.
-// Mutations made before enabling tracking will not be notified.
+// TrackMutate can be used to toggle if mutations are tracked. If this is enabled
+// then notifications will be issued for affected internal nodes and leaves when
+// the transaction is committed.
 func (t *Txn) TrackMutate(track bool) {
 	t.trackMutate = track
 }
@@ -368,8 +368,18 @@ func (t *Txn) GetWatch(k []byte) (<-chan struct{}, interface{}, bool) {
 	return t.root.GetWatch(k)
 }
 
-// Commit is used to finalize the transaction and return a new tree
+// Commit is used to finalize the transaction and return a new tree. If mutation
+// tracking is turned on then notifications will also be issued.
 func (t *Txn) Commit() *Tree {
+	nt := t.commit()
+	if t.trackMutate {
+		t.notify()
+	}
+	return nt
+}
+
+// commit is an internal helper for Commit(), useful for unit tests.
+func (t *Txn) commit() *Tree {
 	nt := &Tree{t.root, t.size}
 	t.writable = nil
 	return nt
@@ -438,9 +448,9 @@ func (t *Txn) slowNotify() {
 	}
 }
 
-// Notify is used along with TrackMutate to trigger notifications.
-// It should only be invoked after the transaction has been committed.
-func (t *Txn) Notify() {
+// notify is used along with TrackMutate to trigger notifications. This should
+// only be done once a transaction is committed.
+func (t *Txn) notify() {
 	// If we've overflowed the tracking state we can't use it in any way and
 	// need to do a full tree compare.
 	if t.trackOverflow {

@@ -606,7 +606,7 @@ func TestMergeChildVisibility(t *testing.T) {
 }
 
 func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		r := New()
 
 		keys := []string{
@@ -642,10 +642,14 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 		txn := r.Txn()
 		txn.TrackMutate(true)
 		txn.Insert([]byte("foobarbaz"), nil)
-		r = txn.Commit()
-		if i == 0 {
-			txn.Notify()
-		} else {
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.commit()
+			txn.notify()
+		default:
+			r = txn.commit()
 			txn.slowNotify()
 		}
 
@@ -692,10 +696,14 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 		txn = r.Txn()
 		txn.TrackMutate(true)
 		txn.Delete([]byte("foobarbaz"))
-		r = txn.Commit()
-		if i == 0 {
-			txn.Notify()
-		} else {
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.commit()
+			txn.notify()
+		default:
+			r = txn.commit()
 			txn.slowNotify()
 		}
 
@@ -729,7 +737,7 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 }
 
 func TestTrackMutate_GetWatch(t *testing.T) {
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		r := New()
 
 		keys := []string{
@@ -773,10 +781,14 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		txn := r.Txn()
 		txn.TrackMutate(true)
 		txn.Insert([]byte("foobarbaz"), nil)
-		r = txn.Commit()
-		if i == 0 {
-			txn.Notify()
-		} else {
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.commit()
+			txn.notify()
+		default:
+			r = txn.commit()
 			txn.slowNotify()
 		}
 
@@ -817,10 +829,14 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		txn = r.Txn()
 		txn.TrackMutate(true)
 		txn.Insert([]byte("foobar"), nil)
-		r = txn.Commit()
-		if i == 0 {
-			txn.Notify()
-		} else {
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.commit()
+			txn.notify()
+		default:
+			r = txn.commit()
 			txn.slowNotify()
 		}
 
@@ -868,10 +884,14 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		txn = r.Txn()
 		txn.TrackMutate(true)
 		txn.Delete([]byte("foobarbaz"))
-		r = txn.Commit()
-		if i == 0 {
-			txn.Notify()
-		} else {
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.commit()
+			txn.notify()
+		default:
+			r = txn.commit()
 			txn.slowNotify()
 		}
 
@@ -912,10 +932,14 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		txn = r.Txn()
 		txn.TrackMutate(true)
 		txn.Delete([]byte("foobar"))
-		r = txn.Commit()
-		if i == 0 {
-			txn.Notify()
-		} else {
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.commit()
+			txn.notify()
+		default:
+			r = txn.commit()
 			txn.slowNotify()
 		}
 
@@ -1026,13 +1050,13 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 	txn.Insert([]byte("foobarbaz"), nil)
 
 	// Commit and make sure we overflowed but didn't take on extra stuff.
-	r = txn.Commit()
+	r = txn.commit()
 	if !txn.trackOverflow || len(txn.trackChannels) != defaultModifiedCache {
 		t.Fatalf("bad")
 	}
 
 	// Now do the trigger.
-	txn.Notify()
+	txn.notify()
 
 	// Verify the watches fired as expected.
 	select {
