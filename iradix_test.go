@@ -1051,7 +1051,7 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 
 	// Commit and make sure we overflowed but didn't take on extra stuff.
 	r = txn.commit()
-	if !txn.trackOverflow || len(txn.trackChannels) != defaultModifiedCache {
+	if !txn.trackOverflow || txn.trackChannels != nil {
 		t.Fatalf("bad")
 	}
 
