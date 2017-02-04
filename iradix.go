@@ -103,16 +103,22 @@ func (t *Txn) trackChannel(ch *chan struct{}) {
 		return
 	}
 
-	// Create the map on the fly when we need it.
-	if t.trackChannels == nil {
-		t.trackChannels = make(map[*chan struct{}]struct{})
-	}
-
 	// If this would overflow the state we reject it and set the flag (since
 	// we aren't tracking everything that's required any longer).
 	if len(t.trackChannels) >= defaultModifiedCache {
+		// Mark that we are in the overflow state
 		t.trackOverflow = true
+
+		// Clear the map so that the channels can be garbage collected. It is
+		// safe to do this since we have already overflowed and will be using
+		// the slow notify algorithm.
+		t.trackChannels = nil
 		return
+	}
+
+	// Create the map on the fly when we need it.
+	if t.trackChannels == nil {
+		t.trackChannels = make(map[*chan struct{}]struct{})
 	}
 
 	// Otherwise we are good to track it.
