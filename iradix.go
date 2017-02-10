@@ -311,7 +311,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 	}
 
 	// Copy this node. WATCH OUT - it's safe to pass "false" here because we
-	// will only ADD a leaf via nc.mergeChilde() if there isn't one due to
+	// will only ADD a leaf via nc.mergeChild() if there isn't one due to
 	// the !nc.isLeaf() check in the logic just below. This is pretty subtle,
 	// so be careful if you change any of the logic here.
 	nc := t.writeNode(n, false)
@@ -377,15 +377,16 @@ func (t *Txn) GetWatch(k []byte) (<-chan struct{}, interface{}, bool) {
 // Commit is used to finalize the transaction and return a new tree. If mutation
 // tracking is turned on then notifications will also be issued.
 func (t *Txn) Commit() *Tree {
-	nt := t.commit()
+	nt := t.CommitOnly()
 	if t.trackMutate {
-		t.notify()
+		t.Notify()
 	}
 	return nt
 }
 
-// commit is an internal helper for Commit(), useful for unit tests.
-func (t *Txn) commit() *Tree {
+// CommitOnly is used to finalize the transaction and return a new tree, but
+// does not issue any notifications until Notify is called.
+func (t *Txn) CommitOnly() *Tree {
 	nt := &Tree{t.root, t.size}
 	t.writable = nil
 	return nt
@@ -454,9 +455,14 @@ func (t *Txn) slowNotify() {
 	}
 }
 
-// notify is used along with TrackMutate to trigger notifications. This should
-// only be done once a transaction is committed.
-func (t *Txn) notify() {
+// Notify is used along with TrackMutate to trigger notifications. This must
+// only be done once a transaction is committed via CommitOnly, and it is called
+// automatically by Commit.
+func (t *Txn) Notify() {
+	if !t.trackMutate {
+		return
+	}
+
 	// If we've overflowed the tracking state we can't use it in any way and
 	// need to do a full tree compare.
 	if t.trackOverflow {

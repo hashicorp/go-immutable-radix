@@ -646,10 +646,10 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 		case 0:
 			r = txn.Commit()
 		case 1:
-			r = txn.commit()
-			txn.notify()
+			r = txn.CommitOnly()
+			txn.Notify()
 		default:
-			r = txn.commit()
+			r = txn.CommitOnly()
 			txn.slowNotify()
 		}
 
@@ -700,10 +700,10 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 		case 0:
 			r = txn.Commit()
 		case 1:
-			r = txn.commit()
-			txn.notify()
+			r = txn.CommitOnly()
+			txn.Notify()
 		default:
-			r = txn.commit()
+			r = txn.CommitOnly()
 			txn.slowNotify()
 		}
 
@@ -785,10 +785,10 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		case 0:
 			r = txn.Commit()
 		case 1:
-			r = txn.commit()
-			txn.notify()
+			r = txn.CommitOnly()
+			txn.Notify()
 		default:
-			r = txn.commit()
+			r = txn.CommitOnly()
 			txn.slowNotify()
 		}
 
@@ -833,10 +833,10 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		case 0:
 			r = txn.Commit()
 		case 1:
-			r = txn.commit()
-			txn.notify()
+			r = txn.CommitOnly()
+			txn.Notify()
 		default:
-			r = txn.commit()
+			r = txn.CommitOnly()
 			txn.slowNotify()
 		}
 
@@ -888,10 +888,10 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		case 0:
 			r = txn.Commit()
 		case 1:
-			r = txn.commit()
-			txn.notify()
+			r = txn.CommitOnly()
+			txn.Notify()
 		default:
-			r = txn.commit()
+			r = txn.CommitOnly()
 			txn.slowNotify()
 		}
 
@@ -936,10 +936,10 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		case 0:
 			r = txn.Commit()
 		case 1:
-			r = txn.commit()
-			txn.notify()
+			r = txn.CommitOnly()
+			txn.Notify()
 		default:
-			r = txn.commit()
+			r = txn.CommitOnly()
 			txn.slowNotify()
 		}
 
@@ -1050,13 +1050,13 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 	txn.Insert([]byte("foobarbaz"), nil)
 
 	// Commit and make sure we overflowed but didn't take on extra stuff.
-	r = txn.commit()
+	r = txn.CommitOnly()
 	if !txn.trackOverflow || txn.trackChannels != nil {
 		t.Fatalf("bad")
 	}
 
 	// Now do the trigger.
-	txn.notify()
+	txn.Notify()
 
 	// Verify the watches fired as expected.
 	select {
