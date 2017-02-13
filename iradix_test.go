@@ -1208,3 +1208,71 @@ func TestTrackMutate_mergeChild(t *testing.T) {
 		}
 	}
 }
+
+func TestTrackMutate_cachedNodeChange(t *testing.T) {
+	// This case does a delete of the "acb" leaf, which causes the "aca"
+	// leaf to get merged with the old "ac" node:
+	//
+	//    [root]                [root]
+	//      |a                    |a
+	//    [node]                [node]
+	//   b/    \c              b/    \c
+	//  (ab)  [node]          (ab)  (aca)
+	//       a/    \b
+	//     (aca)  (acb)
+	//
+	// Then it makes a modification to the "aca" leaf on a node that will
+	// be in the cache, so this makes sure that the leaf watch fires.
+	for i := 0; i < 3; i++ {
+		r := New()
+		r, _, _ = r.Insert([]byte("ab"), nil)
+		r, _, _ = r.Insert([]byte("aca"), nil)
+		r, _, _ = r.Insert([]byte("acb"), nil)
+		snapIter := r.root.rawIterator()
+
+		txn := r.Txn()
+		txn.TrackMutate(true)
+		txn.Delete([]byte("acb"))
+		txn.Insert([]byte("aca"), nil)
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.CommitOnly()
+			txn.Notify()
+		default:
+			r = txn.CommitOnly()
+			txn.slowNotify()
+		}
+		if hasAnyClosedMutateCh(r) {
+			t.Fatalf("bad")
+		}
+
+		// Run through the old tree and make sure the exact channels we
+		// expected were closed.
+		for ; snapIter.Front() != nil; snapIter.Next() {
+			n := snapIter.Front()
+			path := snapIter.Path()
+			switch path {
+			case "", "a", "ac":
+				if !isClosed(n.mutateCh) || n.leaf != nil {
+					t.Fatalf("bad")
+				}
+			case "ab":
+				if isClosed(n.mutateCh) || isClosed(n.leaf.mutateCh) {
+					t.Fatalf("bad")
+				}
+			case "aca":
+				if !isClosed(n.mutateCh) || !isClosed(n.leaf.mutateCh) {
+					t.Fatalf("bad")
+				}
+			case "acb":
+				if !isClosed(n.mutateCh) || !isClosed(n.leaf.mutateCh) {
+					t.Fatalf("bad")
+				}
+			default:
+				t.Fatalf("bad: %s", path)
+			}
+		}
+	}
+}

@@ -140,11 +140,14 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 	}
 
 	// If this node has already been modified, we can continue to use it
-	// during this transaction. If a node gets kicked out of cache then we
-	// *may* notify for its mutation if we end up copying the node again,
-	// but we don't make any guarantees about notifying for intermediate
-	// mutations that were never exposed outside of a transaction.
+	// during this transaction. We know that we don't need to track it for
+	// a node update since the node is writable, but if this is for a leaf
+	// update we track it, in case the initial write to this node didn't
+	// update the leaf.
 	if _, ok := t.writable.Get(n); ok {
+		if t.trackMutate && forLeafUpdate && n.leaf != nil {
+			t.trackChannel(n.leaf.mutateCh)
+		}
 		return n
 	}
 
