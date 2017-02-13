@@ -71,7 +71,7 @@ type Txn struct {
 	// trackOverflow flag, which will cause us to use a more expensive
 	// algorithm to perform the notifications. Mutation tracking is only
 	// performed if trackMutate is true.
-	trackChannels map[*chan struct{}]struct{}
+	trackChannels map[chan struct{}]struct{}
 	trackOverflow bool
 	trackMutate   bool
 }
@@ -97,7 +97,7 @@ func (t *Txn) TrackMutate(track bool) {
 // overflow flag if we can no longer track any more. This limits the amount of
 // state that will accumulate during a transaction and we have a slower algorithm
 // to switch to if we overflow.
-func (t *Txn) trackChannel(ch *chan struct{}) {
+func (t *Txn) trackChannel(ch chan struct{}) {
 	// In overflow, make sure we don't store any more objects.
 	if t.trackOverflow {
 		return
@@ -118,7 +118,7 @@ func (t *Txn) trackChannel(ch *chan struct{}) {
 
 	// Create the map on the fly when we need it.
 	if t.trackChannels == nil {
-		t.trackChannels = make(map[*chan struct{}]struct{})
+		t.trackChannels = make(map[chan struct{}]struct{})
 	}
 
 	// Otherwise we are good to track it.
@@ -150,12 +150,12 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 
 	// Mark this node as being mutated.
 	if t.trackMutate {
-		t.trackChannel(&(n.mutateCh))
+		t.trackChannel(n.mutateCh)
 	}
 
 	// Mark its leaf as being mutated, if appropriate.
 	if t.trackMutate && forLeafUpdate && n.leaf != nil {
-		t.trackChannel(&(n.leaf.mutateCh))
+		t.trackChannel(n.leaf.mutateCh)
 	}
 
 	// Copy the existing node. If you have set forLeafUpdate it will be
@@ -189,7 +189,7 @@ func (t *Txn) mergeChild(n *Node) {
 	e := n.edges[0]
 	child := e.node
 	if t.trackMutate {
-		t.trackChannel(&(child.mutateCh))
+		t.trackChannel(child.mutateCh)
 	}
 
 	// Merge the nodes.
@@ -495,7 +495,7 @@ func (t *Txn) Notify() {
 		t.slowNotify()
 	} else {
 		for ch := range t.trackChannels {
-			close(*ch)
+			close(ch)
 		}
 	}
 
