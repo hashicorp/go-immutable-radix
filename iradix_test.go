@@ -1190,7 +1190,7 @@ func TestTrackMutate_mergeChild(t *testing.T) {
 				if !isClosed(n.mutateCh) || n.leaf != nil {
 					t.Fatalf("bad")
 				}
-			case "ab": // unrelated node / sees no change
+			case "ab": // unrelated node / leaf sees no change
 				if isClosed(n.mutateCh) || isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
@@ -1217,8 +1217,8 @@ func TestTrackMutate_cachedNodeChange(t *testing.T) {
 	//      |a                    |a
 	//    [node]                [node]
 	//   b/    \c              b/    \c
-	//  (ab)  [node]          (ab)  (aca) <- then this leaf gets modified
-	//       a/    \b
+	//  (ab)  [node]          (ab)  (aca*) <- this leaf gets modified
+	//       a/    \b                         post-merge
 	//     (aca)  (acb)
 	//
 	// Then it makes a modification to the "aca" leaf on a node that will
@@ -1258,7 +1258,7 @@ func TestTrackMutate_cachedNodeChange(t *testing.T) {
 				if !isClosed(n.mutateCh) || n.leaf != nil {
 					t.Fatalf("bad")
 				}
-			case "ab": // unrelated node / sees no change
+			case "ab": // unrelated node / leaf sees no change
 				if isClosed(n.mutateCh) || isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
