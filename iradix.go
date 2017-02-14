@@ -71,7 +71,7 @@ type Txn struct {
 	// trackOverflow flag, which will cause us to use a more expensive
 	// algorithm to perform the notifications. Mutation tracking is only
 	// performed if trackMutate is true.
-	trackChannels map[*chan struct{}]struct{}
+	trackChannels map[chan struct{}]struct{}
 	trackOverflow bool
 	trackMutate   bool
 }
@@ -97,7 +97,7 @@ func (t *Txn) TrackMutate(track bool) {
 // overflow flag if we can no longer track any more. This limits the amount of
 // state that will accumulate during a transaction and we have a slower algorithm
 // to switch to if we overflow.
-func (t *Txn) trackChannel(ch *chan struct{}) {
+func (t *Txn) trackChannel(ch chan struct{}) {
 	// In overflow, make sure we don't store any more objects.
 	if t.trackOverflow {
 		return
@@ -118,7 +118,7 @@ func (t *Txn) trackChannel(ch *chan struct{}) {
 
 	// Create the map on the fly when we need it.
 	if t.trackChannels == nil {
-		t.trackChannels = make(map[*chan struct{}]struct{})
+		t.trackChannels = make(map[chan struct{}]struct{})
 	}
 
 	// Otherwise we are good to track it.
@@ -140,25 +140,31 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 	}
 
 	// If this node has already been modified, we can continue to use it
-	// during this transaction. If a node gets kicked out of cache then we
-	// *may* notify for its mutation if we end up copying the node again,
-	// but we don't make any guarantees about notifying for intermediate
-	// mutations that were never exposed outside of a transaction.
+	// during this transaction. We know that we don't need to track it for
+	// a node update since the node is writable, but if this is for a leaf
+	// update we track it, in case the initial write to this node didn't
+	// update the leaf.
 	if _, ok := t.writable.Get(n); ok {
+		if t.trackMutate && forLeafUpdate && n.leaf != nil {
+			t.trackChannel(n.leaf.mutateCh)
+		}
 		return n
 	}
 
 	// Mark this node as being mutated.
 	if t.trackMutate {
-		t.trackChannel(&(n.mutateCh))
+		t.trackChannel(n.mutateCh)
 	}
 
 	// Mark its leaf as being mutated, if appropriate.
 	if t.trackMutate && forLeafUpdate && n.leaf != nil {
-		t.trackChannel(&(n.leaf.mutateCh))
+		t.trackChannel(n.leaf.mutateCh)
 	}
 
-	// Copy the existing node.
+	// Copy the existing node. If you have set forLeafUpdate it will be
+	// safe to replace this leaf with another after you get your node for
+	// writing. You MUST replace it, because the channel associated with
+	// this leaf will be closed when this transaction is committed.
 	nc := &Node{
 		mutateCh: make(chan struct{}),
 		leaf:     n.leaf,
@@ -175,6 +181,29 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 	// Mark this node as writable.
 	t.writable.Add(nc, nil)
 	return nc
+}
+
+// mergeChild is called to collapse the given node with its child. This is only
+// called when the given node is not a leaf and has a single edge.
+func (t *Txn) mergeChild(n *Node) {
+	// Mark the child node as being mutated since we are about to abandon
+	// it. We don't need to mark the leaf since we are retaining it if it
+	// is there.
+	e := n.edges[0]
+	child := e.node
+	if t.trackMutate {
+		t.trackChannel(child.mutateCh)
+	}
+
+	// Merge the nodes.
+	n.prefix = concat(n.prefix, child.prefix)
+	n.leaf = child.leaf
+	if len(child.edges) != 0 {
+		n.edges = make([]edge, len(child.edges))
+		copy(n.edges, child.edges)
+	} else {
+		n.edges = nil
+	}
 }
 
 // insert does a recursive insertion
@@ -291,7 +320,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 
 		// Check if this node should be merged
 		if n != t.root && len(nc.edges) == 1 {
-			nc.mergeChild()
+			t.mergeChild(nc)
 		}
 		return nc, n.leaf
 	}
@@ -320,7 +349,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 	if newChild.leaf == nil && len(newChild.edges) == 0 {
 		nc.delEdge(label)
 		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() {
-			nc.mergeChild()
+			t.mergeChild(nc)
 		}
 	} else {
 		nc.edges[idx].node = newChild
@@ -469,7 +498,7 @@ func (t *Txn) Notify() {
 		t.slowNotify()
 	} else {
 		for ch := range t.trackChannels {
-			close(*ch)
+			close(ch)
 		}
 	}
 
