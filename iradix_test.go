@@ -1186,19 +1186,19 @@ func TestTrackMutate_mergeChild(t *testing.T) {
 			n := snapIter.Front()
 			path := snapIter.Path()
 			switch path {
-			case "", "a", "ac":
+			case "", "a", "ac": // parent nodes all change
 				if !isClosed(n.mutateCh) || n.leaf != nil {
 					t.Fatalf("bad")
 				}
-			case "ab":
+			case "ab": // unrelated node / sees no change
 				if isClosed(n.mutateCh) || isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
-			case "aca":
+			case "aca": // this node gets merged, but the leaf doesn't change
 				if !isClosed(n.mutateCh) || isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
-			case "acb":
+			case "acb": // this node / leaf gets deleted
 				if !isClosed(n.mutateCh) || !isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
@@ -1217,7 +1217,7 @@ func TestTrackMutate_cachedNodeChange(t *testing.T) {
 	//      |a                    |a
 	//    [node]                [node]
 	//   b/    \c              b/    \c
-	//  (ab)  [node]          (ab)  (aca)
+	//  (ab)  [node]          (ab)  (aca) <- then this leaf gets modified
 	//       a/    \b
 	//     (aca)  (acb)
 	//
@@ -1254,19 +1254,19 @@ func TestTrackMutate_cachedNodeChange(t *testing.T) {
 			n := snapIter.Front()
 			path := snapIter.Path()
 			switch path {
-			case "", "a", "ac":
+			case "", "a", "ac": // parent nodes all change
 				if !isClosed(n.mutateCh) || n.leaf != nil {
 					t.Fatalf("bad")
 				}
-			case "ab":
+			case "ab": // unrelated node / sees no change
 				if isClosed(n.mutateCh) || isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
-			case "aca":
+			case "aca": // merge changes the node, then we update the leaf
 				if !isClosed(n.mutateCh) || !isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
-			case "acb":
+			case "acb": // this node / leaf gets deleted
 				if !isClosed(n.mutateCh) || !isClosed(n.leaf.mutateCh) {
 					t.Fatalf("bad")
 				}
