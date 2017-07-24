@@ -184,8 +184,10 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 }
 
 // Visit all the nodes in the tree under n, and add their mutateChannels to the transaction
-func (t *Txn) recursiveWatchNotify(n *Node, fn func(n *Node) bool) bool {
+// Returns the size of the subtree visited
+func (t *Txn) recursiveTrackChannelAndCount(n *Node) int {
 
+	nodesTraversed := 1
 	// Mark this node as being mutated.
 	if t.trackMutate {
 		t.trackChannel(n.mutateCh)
@@ -196,17 +198,11 @@ func (t *Txn) recursiveWatchNotify(n *Node, fn func(n *Node) bool) bool {
 		t.trackChannel(n.leaf.mutateCh)
 	}
 
-	if n.leaf != nil && fn(n) {
-		return true
-	}
-
 	// Recurse on the children
 	for _, e := range n.edges {
-		if t.recursiveWatchNotify(e.node, fn) {
-			return true
-		}
+		nodesTraversed += t.recursiveTrackChannelAndCount(e.node)
 	}
-	return false
+	return nodesTraversed
 }
 
 // mergeChild is called to collapse the given node with its child. This is only
@@ -389,20 +385,19 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 	if len(search) == 0 {
 		// Remove the leaf node
 		nc := t.writeNode(n, true)
-		subTreeSize := 0 //count this node
-		//recursively walk from all edges of the node to be deleted, tracking their mutate channels in the transaction
-		for _, e := range n.edges {
-			t.recursiveWatchNotify(e.node, func(n *Node) bool {
-				subTreeSize++
-				return false
-			})
-		}
 		if n.isLeaf() {
 			nc.leaf = nil
-			subTreeSize += 1
 		}
-		nc.edges = nil // deletes the entire subtree
-
+		subTreeSize := 0
+		if n.edges == nil { //handle case when there are no edges
+			subTreeSize = 1
+		} else {
+			//recursively walk from all edges of the node to be deleted, tracking their mutate channels in the transaction
+			for _, e := range n.edges {
+				subTreeSize += t.recursiveTrackChannelAndCount(e.node)
+			}
+			nc.edges = nil // deletes the entire subtree
+		}
 		return nc, subTreeSize
 	}
 

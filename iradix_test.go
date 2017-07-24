@@ -213,34 +213,41 @@ func TestDelete(t *testing.T) {
 
 func TestDeletePrefix(t *testing.T) {
 
-	expected := []string{"", "R", "RA"}
-	//verify delete when prefix being deleted is not also a leaf node
-	nodes1 := []string{"", "test/test1", "test/test2", "test/test3", "R", "RA"}
-	verifyPrefixDelete(t, nodes1, "test", expected)
+	type exp struct {
+		treeNodes   []string
+		prefix      string
+		expectedOut []string
+	}
 
-	//verify delete when prefix being deleted is also a leaf node
-	nodes2 := []string{"", "test", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}
-	verifyPrefixDelete(t, nodes2, "test", expected)
+	//various test cases where DeletePrefix should succeed
+	cases := []exp{
+		{[]string{"", "test/test1", "test/test2", "test/test3", "R", "RA"}, "test", []string{"", "R", "RA"}},
+		{[]string{"", "test", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test", []string{"", "R", "RA"}},
+		{[]string{"", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test/test", []string{"", "R", "RA"}},
+		{[]string{"", "AB", "ABC", "AR", "R", "RA"}, "AR", []string{"", "AB", "ABC", "R", "RA"}},
+	}
 
-	//verify deleting a longer partially matched prefix
-	nodes3 := []string{"", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}
-	verifyPrefixDelete(t, nodes3, "test/test", expected)
+	for _, testCase := range cases {
+		verifyPrefixDelete(t, testCase.treeNodes, testCase.prefix, testCase.expectedOut)
+	}
 
 	//verify deleting a prefix that doesn't exist
-	verifyInvalidPrefix(t, nodes1, "XXXX")
+	verifyInvalidPrefix(t, []string{"", "test/test1", "test/test2"}, "XXXX")
 }
 func verifyPrefixDelete(t *testing.T, nodes []string, prefix string, expected []string) {
 	r := New()
 	for _, ss := range nodes {
 		r, _, _ = r.Insert([]byte(ss), true)
 	}
-
+	if r.Len() != len(nodes) {
+		t.Fatalf("Unexpected tree length after insert, expected %v but got %v ", len(nodes), r.Len())
+	}
 	r, ok := r.DeletePrefix([]byte(prefix))
 	if !ok {
-		t.Fatal("DeletePrefix should have returned true")
+		t.Fatalf("DeletePrefix should have returned true for tree %v, deleting prefix %v", nodes, prefix)
 	}
 	if r.Len() != len(expected) {
-		t.Fatalf("Bad tree length, expected %v got %v", len(expected), r.Len())
+		t.Fatalf("Bad tree length, expected %v got %v for tree %v, deleting prefix %v ", len(expected), r.Len(), nodes, prefix)
 	}
 
 	verifyTree(t, expected, r)
