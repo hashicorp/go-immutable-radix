@@ -390,25 +390,8 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 		if n.isLeaf() {
 			nc.leaf = nil
 		}
-
 		nc.edges = nil
 		return nc, t.trackChannelsAndCount(n)
-		// Remove the leaf node
-		/*nc := t.writeNode(n, true)
-		if n.isLeaf() {
-			nc.leaf = nil
-		}
-		subTreeSize := 0
-		if n.edges == nil { //handle case when there are no edges
-			subTreeSize = 1
-		} else {
-			//recursively walk from all edges of the node to be deleted, tracking their mutate channels in the transaction
-			for _, e := range n.edges {
-				subTreeSize += t.trackChannelsAndCount(e.node)
-			}
-			nc.edges = nil // deletes the entire subtree
-		}
-		return nc, subTreeSize*/
 	}
 
 	// Look for an edge
