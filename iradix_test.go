@@ -229,7 +229,7 @@ func TestDeletePrefix(t *testing.T) {
 	}
 
 	for _, testCase := range cases {
-		t.Run(testCase.desc, func(t *testing.T){
+		t.Run(testCase.desc, func(t *testing.T) {
 			r := New()
 			for _, ss := range testCase.treeNodes {
 				r, _, _ = r.Insert([]byte(ss), true)
@@ -290,12 +290,10 @@ func TestTrackMutate_DeletePrefix(t *testing.T) {
 		t.Fatalf("Should have returned a watch")
 	}
 
-
 	nodeWatch3, _, _ := r.Root().GetWatch([]byte("foo/zip/zap"))
 	if nodeWatch3 == nil {
 		t.Fatalf("Should have returned a watch")
 	}
-
 
 	unknownNodeWatch, _, _ := r.Root().GetWatch([]byte("bazbaz"))
 	if unknownNodeWatch == nil {
@@ -315,7 +313,7 @@ func TestTrackMutate_DeletePrefix(t *testing.T) {
 
 	txn.Commit()
 
-	// Verify root and parent triggered, not leaf affected
+	// Verify that all the leaf nodes we set up watches for above get triggered from the delete prefix call
 	select {
 	case <-rootWatch:
 	default:
