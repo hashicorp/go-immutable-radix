@@ -185,9 +185,12 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 
 // Visit all the nodes in the tree under n, and add their mutateChannels to the transaction
 // Returns the size of the subtree visited
-func (t *Txn) recursiveTrackChannelAndCount(n *Node) int {
-
-	nodesTraversed := 1
+func (t *Txn) trackChannelsAndCount(n *Node) int {
+	// Count only leaf nodes
+	nodesTraversed := 0
+	if n.leaf != nil {
+		nodesTraversed = 1
+	}
 	// Mark this node as being mutated.
 	if t.trackMutate {
 		t.trackChannel(n.mutateCh)
@@ -200,7 +203,7 @@ func (t *Txn) recursiveTrackChannelAndCount(n *Node) int {
 
 	// Recurse on the children
 	for _, e := range n.edges {
-		nodesTraversed += t.recursiveTrackChannelAndCount(e.node)
+		nodesTraversed += t.trackChannelsAndCount(e.node)
 	}
 	return nodesTraversed
 }
@@ -383,8 +386,15 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 	// Check for key exhaustion
 	if len(search) == 0 {
-		// Remove the leaf node
 		nc := t.writeNode(n, true)
+		if n.isLeaf() {
+			nc.leaf = nil
+		}
+
+		nc.edges = nil
+		return nc, t.trackChannelsAndCount(n)
+		// Remove the leaf node
+		/*nc := t.writeNode(n, true)
 		if n.isLeaf() {
 			nc.leaf = nil
 		}
@@ -394,23 +404,25 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 		} else {
 			//recursively walk from all edges of the node to be deleted, tracking their mutate channels in the transaction
 			for _, e := range n.edges {
-				subTreeSize += t.recursiveTrackChannelAndCount(e.node)
+				subTreeSize += t.trackChannelsAndCount(e.node)
 			}
 			nc.edges = nil // deletes the entire subtree
 		}
-		return nc, subTreeSize
+		return nc, subTreeSize*/
 	}
 
 	// Look for an edge
 	label := search[0]
 	idx, child := n.getEdge(label)
+	// We make sure that either the child node's prefix starts with the search term, or the search term starts with the child node's prefix
+	// Need to do both so that we can delete prefixes that don't correspond to any node in the tree
 	if child == nil || (!bytes.HasPrefix(child.prefix, search) && !bytes.HasPrefix(search, child.prefix)) {
 		return nil, 0
 	}
 
 	// Consume the search prefix
 	if len(child.prefix) > len(search) {
-		search = search[len(search):]
+		search = []byte("")
 	} else {
 		search = search[len(child.prefix):]
 	}
@@ -418,7 +430,11 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 	if newChild == nil {
 		return nil, 0
 	}
-	//copy this node
+	// Copy this node. WATCH OUT - it's safe to pass "false" here because we
+	// will only ADD a leaf via nc.mergeChild() if there isn't one due to
+	// the !nc.isLeaf() check in the logic just below. This is pretty subtle,
+	// so be careful if you change any of the logic here.
+
 	nc := t.writeNode(n, false)
 
 	// Delete the edge if the node has no edges
@@ -466,12 +482,11 @@ func (t *Txn) DeletePrefix(prefix []byte) bool {
 	newRoot, numDeletions := t.deletePrefix(nil, t.root, prefix)
 	if newRoot != nil {
 		t.root = newRoot
-	}
-	if numDeletions > 0 {
 		t.size = t.size - numDeletions
 		return true
 	}
 	return false
+
 }
 
 // Root returns the current root of the radix tree within this
@@ -614,8 +629,8 @@ func (t *Tree) Delete(k []byte) (*Tree, interface{}, bool) {
 	return txn.Commit(), old, ok
 }
 
-// Delete is used to delete a given key. Returns the new tree,
-// old value if any, and a bool indicating if the key was set.
+// DeletePrefix is used to delete all nodes starting with a given prefix. Returns the new tree,
+// and a bool indicating if the prefix matched any nodes
 func (t *Tree) DeletePrefix(k []byte) (*Tree, bool) {
 	txn := t.Txn()
 	ok := txn.DeletePrefix(k)

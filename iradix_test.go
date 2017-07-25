@@ -214,6 +214,7 @@ func TestDelete(t *testing.T) {
 func TestDeletePrefix(t *testing.T) {
 
 	type exp struct {
+		desc        string
 		treeNodes   []string
 		prefix      string
 		expectedOut []string
@@ -221,52 +222,37 @@ func TestDeletePrefix(t *testing.T) {
 
 	//various test cases where DeletePrefix should succeed
 	cases := []exp{
-		{[]string{"", "test/test1", "test/test2", "test/test3", "R", "RA"}, "test", []string{"", "R", "RA"}},
-		{[]string{"", "test", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test", []string{"", "R", "RA"}},
-		{[]string{"", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test/test", []string{"", "R", "RA"}},
-		{[]string{"", "AB", "ABC", "AR", "R", "RA"}, "AR", []string{"", "AB", "ABC", "R", "RA"}},
+		{"prefix not a node in tree", []string{"", "test/test1", "test/test2", "test/test3", "R", "RA"}, "test", []string{"", "R", "RA"}},
+		{"prefix matches a node in tree", []string{"", "test", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test", []string{"", "R", "RA"}},
+		{"longer prefix, but prefix is not a node in tree", []string{"", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test/test", []string{"", "R", "RA"}},
+		{"prefix only matches one node", []string{"", "AB", "ABC", "AR", "R", "RA"}, "AR", []string{"", "AB", "ABC", "R", "RA"}},
 	}
 
 	for _, testCase := range cases {
-		verifyPrefixDelete(t, testCase.treeNodes, testCase.prefix, testCase.expectedOut)
-	}
+		t.Run(testCase.desc, func(t *testing.T){
+			r := New()
+			for _, ss := range testCase.treeNodes {
+				r, _, _ = r.Insert([]byte(ss), true)
+			}
+			if r.Len() != len(testCase.treeNodes) {
+				t.Fatalf("Unexpected tree length after insert, expected %v but got %v ", len(testCase.treeNodes), r.Len())
+			}
+			r, ok := r.DeletePrefix([]byte(testCase.prefix))
+			if !ok {
+				t.Fatalf("DeletePrefix should have returned true for tree %v, deleting prefix %v", testCase.treeNodes, testCase.prefix)
+			}
+			if r.Len() != len(testCase.expectedOut) {
+				t.Fatalf("Bad tree length, expected %v got %v for tree %v, deleting prefix %v ", len(testCase.expectedOut), r.Len(), testCase.treeNodes, testCase.prefix)
+			}
 
-	//verify deleting a prefix that doesn't exist
-	verifyInvalidPrefix(t, []string{"", "test/test1", "test/test2"}, "XXXX")
-}
-func verifyPrefixDelete(t *testing.T, nodes []string, prefix string, expected []string) {
-	r := New()
-	for _, ss := range nodes {
-		r, _, _ = r.Insert([]byte(ss), true)
-	}
-	if r.Len() != len(nodes) {
-		t.Fatalf("Unexpected tree length after insert, expected %v but got %v ", len(nodes), r.Len())
-	}
-	r, ok := r.DeletePrefix([]byte(prefix))
-	if !ok {
-		t.Fatalf("DeletePrefix should have returned true for tree %v, deleting prefix %v", nodes, prefix)
-	}
-	if r.Len() != len(expected) {
-		t.Fatalf("Bad tree length, expected %v got %v for tree %v, deleting prefix %v ", len(expected), r.Len(), nodes, prefix)
-	}
-
-	verifyTree(t, expected, r)
-
-}
-
-func verifyInvalidPrefix(t *testing.T, nodes []string, prefix string) {
-	r := New()
-	for _, ss := range nodes {
-		r, _, _ = r.Insert([]byte(ss), true)
-	}
-
-	prevLen := r.Len()
-	r, ok := r.DeletePrefix([]byte(prefix))
-	if ok {
-		t.Fatal("DeletePrefix should have returned false")
-	}
-	if r.Len() != prevLen {
-		t.Fatalf("Bad tree length, expected %v but got %v", prevLen, r.Len())
+			verifyTree(t, testCase.expectedOut, r)
+			//Delete a non-existant node
+			r, ok = r.DeletePrefix([]byte("CCCCC"))
+			if ok {
+				t.Fatalf("Expected DeletePrefix to return false ")
+			}
+			verifyTree(t, testCase.expectedOut, r)
+		})
 	}
 }
 
@@ -294,10 +280,22 @@ func TestTrackMutate_DeletePrefix(t *testing.T) {
 		t.Fatalf("Should have returned a watch")
 	}
 
-	nodeWatch, _, _ := r.Root().GetWatch([]byte("foo/bar/baz"))
-	if nodeWatch == nil {
+	nodeWatch1, _, _ := r.Root().GetWatch([]byte("foo/bar/baz"))
+	if nodeWatch1 == nil {
 		t.Fatalf("Should have returned a watch")
 	}
+
+	nodeWatch2, _, _ := r.Root().GetWatch([]byte("foo/baz/bar"))
+	if nodeWatch2 == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
+
+	nodeWatch3, _, _ := r.Root().GetWatch([]byte("foo/zip/zap"))
+	if nodeWatch3 == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
 
 	unknownNodeWatch, _, _ := r.Root().GetWatch([]byte("bazbaz"))
 	if unknownNodeWatch == nil {
@@ -324,7 +322,17 @@ func TestTrackMutate_DeletePrefix(t *testing.T) {
 		t.Fatalf("root watch was not triggered")
 	}
 	select {
-	case <-nodeWatch:
+	case <-nodeWatch1:
+	default:
+		t.Fatalf("node watch was not triggered")
+	}
+	select {
+	case <-nodeWatch2:
+	default:
+		t.Fatalf("node watch was not triggered")
+	}
+	select {
+	case <-nodeWatch3:
 	default:
 		t.Fatalf("node watch was not triggered")
 	}
