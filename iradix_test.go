@@ -222,10 +222,78 @@ func TestDeletePrefix(t *testing.T) {
 
 	//various test cases where DeletePrefix should succeed
 	cases := []exp{
-		{"prefix not a node in tree", []string{"", "test/test1", "test/test2", "test/test3", "R", "RA"}, "test", []string{"", "R", "RA"}},
-		{"prefix matches a node in tree", []string{"", "test", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test", []string{"", "R", "RA"}},
-		{"longer prefix, but prefix is not a node in tree", []string{"", "test/test1", "test/test2", "test/test3", "test/testAAA", "R", "RA"}, "test/test", []string{"", "R", "RA"}},
-		{"prefix only matches one node", []string{"", "AB", "ABC", "AR", "R", "RA"}, "AR", []string{"", "AB", "ABC", "R", "RA"}},
+		{
+			"prefix not a node in tree",
+			[]string{
+				"",
+				"test/test1",
+				"test/test2",
+				"test/test3",
+				"R",
+				"RA"},
+			"test",
+			[]string{
+				"",
+				"R",
+				"RA",
+			},
+		},
+		{
+			"prefix matches a node in tree",
+			[]string{
+				"",
+				"test",
+				"test/test1",
+				"test/test2",
+				"test/test3",
+				"test/testAAA",
+				"R",
+				"RA",
+			},
+			"test",
+			[]string{
+				"",
+				"R",
+				"RA",
+			},
+		},
+		{
+			"longer prefix, but prefix is not a node in tree",
+			[]string{
+				"",
+				"test/test1",
+				"test/test2",
+				"test/test3",
+				"test/testAAA",
+				"R",
+				"RA",
+			},
+			"test/test",
+			[]string{
+				"",
+				"R",
+				"RA",
+			},
+		},
+		{
+			"prefix only matches one node",
+			[]string{
+				"",
+				"AB",
+				"ABC",
+				"AR",
+				"R",
+				"RA",
+			},
+			"AR",
+			[]string{
+				"",
+				"AB",
+				"ABC",
+				"R",
+				"RA",
+			},
+		},
 	}
 
 	for _, testCase := range cases {
