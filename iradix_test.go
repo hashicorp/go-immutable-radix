@@ -202,13 +202,225 @@ func TestDelete(t *testing.T) {
 	for _, ss := range s {
 		r, _, _ = r.Insert([]byte(ss), true)
 	}
-
 	var ok bool
 	for _, ss := range s {
 		r, _, ok = r.Delete([]byte(ss))
 		if !ok {
 			t.Fatalf("bad %q", ss)
 		}
+	}
+}
+
+func TestDeletePrefix(t *testing.T) {
+
+	type exp struct {
+		desc        string
+		treeNodes   []string
+		prefix      string
+		expectedOut []string
+	}
+
+	//various test cases where DeletePrefix should succeed
+	cases := []exp{
+		{
+			"prefix not a node in tree",
+			[]string{
+				"",
+				"test/test1",
+				"test/test2",
+				"test/test3",
+				"R",
+				"RA"},
+			"test",
+			[]string{
+				"",
+				"R",
+				"RA",
+			},
+		},
+		{
+			"prefix matches a node in tree",
+			[]string{
+				"",
+				"test",
+				"test/test1",
+				"test/test2",
+				"test/test3",
+				"test/testAAA",
+				"R",
+				"RA",
+			},
+			"test",
+			[]string{
+				"",
+				"R",
+				"RA",
+			},
+		},
+		{
+			"longer prefix, but prefix is not a node in tree",
+			[]string{
+				"",
+				"test/test1",
+				"test/test2",
+				"test/test3",
+				"test/testAAA",
+				"R",
+				"RA",
+			},
+			"test/test",
+			[]string{
+				"",
+				"R",
+				"RA",
+			},
+		},
+		{
+			"prefix only matches one node",
+			[]string{
+				"",
+				"AB",
+				"ABC",
+				"AR",
+				"R",
+				"RA",
+			},
+			"AR",
+			[]string{
+				"",
+				"AB",
+				"ABC",
+				"R",
+				"RA",
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.desc, func(t *testing.T) {
+			r := New()
+			for _, ss := range testCase.treeNodes {
+				r, _, _ = r.Insert([]byte(ss), true)
+			}
+			if got, want := r.Len(), len(testCase.treeNodes); got != want {
+				t.Fatalf("Unexpected tree length after insert, got %d want %d ", got, want)
+			}
+			r, ok := r.DeletePrefix([]byte(testCase.prefix))
+			if !ok {
+				t.Fatalf("DeletePrefix should have returned true for tree %v, deleting prefix %v", testCase.treeNodes, testCase.prefix)
+			}
+			if got, want := r.Len(), len(testCase.expectedOut); got != want {
+				t.Fatalf("Bad tree length, got %d want %d tree %v, deleting prefix %v ", got, want, testCase.treeNodes, testCase.prefix)
+			}
+
+			verifyTree(t, testCase.expectedOut, r)
+			//Delete a non-existant node
+			r, ok = r.DeletePrefix([]byte("CCCCC"))
+			if ok {
+				t.Fatalf("Expected DeletePrefix to return false ")
+			}
+			verifyTree(t, testCase.expectedOut, r)
+		})
+	}
+}
+
+func TestTrackMutate_DeletePrefix(t *testing.T) {
+
+	r := New()
+
+	keys := []string{
+		"foo",
+		"foo/bar/baz",
+		"foo/baz/bar",
+		"foo/zip/zap",
+		"bazbaz",
+		"zipzap",
+	}
+	for _, k := range keys {
+		r, _, _ = r.Insert([]byte(k), nil)
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	rootWatch, _, _ := r.Root().GetWatch(nil)
+	if rootWatch == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
+	nodeWatch1, _, _ := r.Root().GetWatch([]byte("foo/bar/baz"))
+	if nodeWatch1 == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
+	nodeWatch2, _, _ := r.Root().GetWatch([]byte("foo/baz/bar"))
+	if nodeWatch2 == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
+	nodeWatch3, _, _ := r.Root().GetWatch([]byte("foo/zip/zap"))
+	if nodeWatch3 == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
+	unknownNodeWatch, _, _ := r.Root().GetWatch([]byte("bazbaz"))
+	if unknownNodeWatch == nil {
+		t.Fatalf("Should have returned a watch")
+	}
+
+	// Verify that deleting prefixes triggers the right set of watches
+	txn := r.Txn()
+	txn.TrackMutate(true)
+	ok := txn.DeletePrefix([]byte("foo"))
+	if !ok {
+		t.Fatalf("Expected delete prefix to return true")
+	}
+	if hasAnyClosedMutateCh(r) {
+		t.Fatalf("Transaction was not committed, no channel should have been closed")
+	}
+
+	txn.Commit()
+
+	// Verify that all the leaf nodes we set up watches for above get triggered from the delete prefix call
+	select {
+	case <-rootWatch:
+	default:
+		t.Fatalf("root watch was not triggered")
+	}
+	select {
+	case <-nodeWatch1:
+	default:
+		t.Fatalf("node watch was not triggered")
+	}
+	select {
+	case <-nodeWatch2:
+	default:
+		t.Fatalf("node watch was not triggered")
+	}
+	select {
+	case <-nodeWatch3:
+	default:
+		t.Fatalf("node watch was not triggered")
+	}
+	select {
+	case <-unknownNodeWatch:
+		t.Fatalf("Unrelated node watch was triggered during a prefix delete")
+	default:
+	}
+
+}
+
+func verifyTree(t *testing.T, expected []string, r *Tree) {
+	root := r.Root()
+	out := []string{}
+	fn := func(k []byte, v interface{}) bool {
+		out = append(out, string(k))
+		return false
+	}
+	root.Walk(fn)
+
+	if !reflect.DeepEqual(expected, out) {
+		t.Fatalf("Unexpected contents of tree after delete prefix: expected %v, but got %v", expected, out)
 	}
 }
 
