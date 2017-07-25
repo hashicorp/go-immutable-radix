@@ -302,15 +302,15 @@ func TestDeletePrefix(t *testing.T) {
 			for _, ss := range testCase.treeNodes {
 				r, _, _ = r.Insert([]byte(ss), true)
 			}
-			if r.Len() != len(testCase.treeNodes) {
-				t.Fatalf("Unexpected tree length after insert, expected %v but got %v ", len(testCase.treeNodes), r.Len())
+			if got, want := r.Len(), len(testCase.treeNodes); got != want {
+				t.Fatalf("Unexpected tree length after insert, got %d want %d ", got, want)
 			}
 			r, ok := r.DeletePrefix([]byte(testCase.prefix))
 			if !ok {
 				t.Fatalf("DeletePrefix should have returned true for tree %v, deleting prefix %v", testCase.treeNodes, testCase.prefix)
 			}
-			if r.Len() != len(testCase.expectedOut) {
-				t.Fatalf("Bad tree length, expected %v got %v for tree %v, deleting prefix %v ", len(testCase.expectedOut), r.Len(), testCase.treeNodes, testCase.prefix)
+			if got, want := r.Len(), len(testCase.expectedOut); got != want {
+				t.Fatalf("Bad tree length, got %d want %d tree %v, deleting prefix %v ", got, want, testCase.treeNodes, testCase.prefix)
 			}
 
 			verifyTree(t, testCase.expectedOut, r)
