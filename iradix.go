@@ -187,9 +187,9 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 // Returns the size of the subtree visited
 func (t *Txn) trackChannelsAndCount(n *Node) int {
 	// Count only leaf nodes
-	nodesTraversed := 0
+	leaves := 0
 	if n.leaf != nil {
-		nodesTraversed = 1
+		leaves = 1
 	}
 	// Mark this node as being mutated.
 	if t.trackMutate {
@@ -203,9 +203,9 @@ func (t *Txn) trackChannelsAndCount(n *Node) int {
 
 	// Recurse on the children
 	for _, e := range n.edges {
-		nodesTraversed += t.trackChannelsAndCount(e.node)
+		leaves += t.trackChannelsAndCount(e.node)
 	}
-	return nodesTraversed
+	return leaves
 }
 
 // mergeChild is called to collapse the given node with its child. This is only
