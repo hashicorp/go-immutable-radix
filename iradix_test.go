@@ -1488,3 +1488,38 @@ func TestTrackMutate_cachedNodeChange(t *testing.T) {
 		}
 	}
 }
+
+func TestLenTxn(t *testing.T) {
+	r := New()
+
+	if r.Len() != 0 {
+		t.Fatalf("not starting with empty tree")
+	}
+
+	txn := r.Txn()
+	keys := []string{
+		"foo/bar/baz",
+		"foo/baz/bar",
+		"foo/zip/zap",
+		"foobar",
+		"nochange",
+	}
+	for _, k := range keys {
+		txn.Insert([]byte(k), nil)
+	}
+	r = txn.Commit()
+
+	if r.Len() != len(keys) {
+		t.Fatalf("bad: expected %d, got %d", len(keys), r.Len())
+	}
+
+	txn = r.Txn()
+	for _, k := range keys {
+		txn.Delete([]byte(k))
+	}
+	r = txn.Commit()
+
+	if r.Len() != 0 {
+		t.Fatalf("tree len should be zero, got %d", r.Len())
+	}
+}
