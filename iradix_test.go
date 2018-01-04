@@ -167,7 +167,7 @@ func TestRoot(t *testing.T) {
 	}
 	val, ok := r.Get(nil)
 	if !ok || val != true {
-		t.Fatalf("bad: %v %#v", val)
+		t.Fatalf("bad: %#v", val)
 	}
 	r, val, ok = r.Delete(nil)
 	if !ok || val != true {
