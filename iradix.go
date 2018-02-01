@@ -63,7 +63,7 @@ type Txn struct {
 	// nodes for further writes and avoid unnecessary copies of nodes that
 	// have never been exposed outside the transaction. This will only hold
 	// up to defaultModifiedCache number of entries.
-	writable *simplelru.LRU
+	writable simplelru.LRUCache
 
 	// trackChannels is used to hold channels that need to be notified to
 	// signal mutation of the tree. This will only hold up to
