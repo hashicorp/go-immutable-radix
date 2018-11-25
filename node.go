@@ -3,12 +3,18 @@ package iradix
 import (
 	"bytes"
 	"sort"
+
+	"code.sajari.com/go-immutable-radix/pkg/levenshtein"
 )
 
 // WalkFn is used when walking the tree. Takes a
 // key and value, returning if iteration should
 // be terminated.
 type WalkFn func(k []byte, v interface{}) bool
+
+// DistFn is used when walking the tree to adjust
+// for the levenshtein difference in the path prefix
+type DistFn func(v interface{}, distance int) interface{}
 
 // leafNode is used to represent a value
 type leafNode struct {
@@ -239,6 +245,30 @@ func (n *Node) WalkPrefix(prefix []byte, fn WalkFn) {
 		} else {
 			break
 		}
+	}
+}
+
+// WalkPrefix is used to walk the tree under a prefix. The depth is the fuzzy
+// Levenshtein distance tolerated during the recursive walk down the tree.
+// This assumes the first edge char of the prefix is correct, otherwise this could be
+// very, very slow. The DistFn is used to augment v, such that external consumers
+// can modify the value of v before the WalkFn handles it
+func (n *Node) WalkFuzzyPrefix(prefix []byte, depth int, dfn DistFn, fn WalkFn) {
+	for {
+		// Look for an edge (assume the first letter of the prefix is ok)
+		_, n = n.getEdge(prefix[0])
+		if n == nil {
+			break
+		}
+
+		recursiveWalk(n, func(k []byte, v interface{}) bool {
+			distance, ok := levenshtein.HasPrefix(k, prefix, depth)
+			if !ok {
+				return false
+			}
+			v = dfn(v, distance)
+			return fn(k, v)
+		})
 	}
 }
 
