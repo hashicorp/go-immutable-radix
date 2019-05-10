@@ -1529,3 +1529,184 @@ func TestLenTxn(t *testing.T) {
 		t.Fatalf("tree len should be zero, got %d", r.Len())
 	}
 }
+
+func TestIterateLowerBound(t *testing.T) {
+	r := New()
+
+	keys := []string{
+		"00000",
+		"00001",
+		"00004",
+		"00010",
+		"00020",
+		"20020",
+	}
+	for _, k := range keys {
+		r, _, _ = r.Insert([]byte(k), nil)
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	type exp struct {
+		inp string
+		out []string
+	}
+	cases := []exp{
+		exp{
+			"00000",
+			keys,
+		},
+		exp{
+			"00003",
+			[]string{
+				"00004",
+				"00010",
+				"00020",
+				"20020",
+			},
+		},
+		exp{
+			"00010",
+			[]string{
+				"00010",
+				"00020",
+				"20020",
+			},
+		},
+		exp{
+			"20000",
+			[]string{
+				"20020",
+			},
+		},
+		exp{
+			"20020",
+			[]string{
+				"20020",
+			},
+		},
+		exp{
+			"20022",
+			[]string{},
+		},
+	}
+
+	root := r.Root()
+	for idx, test := range cases {
+		iter := root.Iterator()
+		if test.inp != "" {
+			iter.SeekLowerBound([]byte(test.inp))
+		}
+
+		// Consume all the keys
+		out := []string{}
+		for {
+			key, _, ok := iter.Next()
+			if !ok {
+				break
+			}
+			out = append(out, string(key))
+		}
+		if !reflect.DeepEqual(out, test.out) {
+			t.Fatalf("mis-match[%d]: key=%s\n  got=%v\n  want=%v", idx, test.inp,
+				out, test.out)
+		}
+	}
+}
+
+func TestIterateLowerBoundMixedLenKeys(t *testing.T) {
+	r := New()
+
+	keys := []string{
+		"a1",
+		"abc",
+		"barbazboo",
+		"foo",
+		"found",
+		"zap",
+		"zip",
+	}
+	for _, k := range keys {
+		r, _, _ = r.Insert([]byte(k), nil)
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	type exp struct {
+		inp string
+		out []string
+	}
+	cases := []exp{
+		exp{
+			"A", // before all lower case letters
+			keys,
+		},
+		exp{
+			"a1",
+			keys,
+		},
+		exp{
+			"b",
+			[]string{
+				"barbazboo",
+				"foo",
+				"found",
+				"zap",
+				"zip",
+			},
+		},
+		exp{
+			"bar",
+			[]string{
+				"barbazboo",
+				"foo",
+				"found",
+				"zap",
+				"zip",
+			},
+		},
+		exp{
+			"barbazboo0",
+			[]string{
+				"foo",
+				"found",
+				"zap",
+				"zip",
+			},
+		},
+		exp{
+			"zippy",
+			[]string{},
+		},
+		exp{
+			"zi",
+			[]string{
+				"zip",
+			},
+		},
+	}
+
+	root := r.Root()
+	for idx, test := range cases {
+		iter := root.Iterator()
+		if test.inp != "" {
+			iter.SeekLowerBound([]byte(test.inp))
+		}
+
+		// Consume all the keys
+		out := []string{}
+		for {
+			key, _, ok := iter.Next()
+			if !ok {
+				break
+			}
+			out = append(out, string(key))
+		}
+		if !reflect.DeepEqual(out, test.out) {
+			t.Fatalf("mis-match[%d]: key=%s\n  got=%v\n  want=%v", idx, test.inp,
+				out, test.out)
+		}
+	}
+}
