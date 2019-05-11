@@ -55,6 +55,21 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 	i.SeekPrefixWatch(prefix)
 }
 
+func (i *Iterator) recurseMin(n *Node) *Node {
+	// Traverse to the minimum child
+	if n.leaf != nil {
+		return n
+	}
+	if len(n.edges) > 0 {
+		// Add all the other edges to the stack (the min node will be added as
+		// we recurse)
+		i.stack = append(i.stack, n.edges[1:])
+		return i.recurseMin(n.edges[0].node)
+	}
+	// Shouldn't be possible
+	return nil
+}
+
 // SeekLowerBound is used to seek the iterator to the smallest key that is
 // greater or equal to the given key. There is no watch variant as it's hard to
 // predict based on the radix structure which node(s) changes might affect the
@@ -73,6 +88,43 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 	}
 
 	for {
+		// Compare current prefix with the seaarch key's same-length prefix.
+		var prefixCmp int
+		if len(n.prefix) < len(search) {
+			prefixCmp = bytes.Compare(n.prefix, search[0:len(n.prefix)])
+		} else {
+			prefixCmp = bytes.Compare(n.prefix, search)
+		}
+
+		if prefixCmp > 0 {
+			// Prefix is larger, that means the lower bound is greater than the search
+			// and from now on we need to follow the minimum path to the smallest
+			// leaf under this subtree.
+			n = i.recurseMin(n)
+			if n != nil {
+				found(n)
+			}
+			return
+		}
+
+		if prefixCmp < 0 {
+			// Prefix is smaller than search prefix, that means there is no lower
+			// bound
+			i.node = nil
+			return
+		}
+
+		// Prefix is equal, we are still heading for an exact match. If this is a
+		// leaf we're done.
+		if n.leaf != nil {
+			if bytes.Compare(n.leaf.key, key) < 0 {
+				i.node = nil
+				return
+			}
+			found(n)
+			return
+		}
+
 		// Consume the search prefix
 		if len(n.prefix) > len(search) {
 			search = []byte{}
@@ -80,27 +132,7 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			search = search[len(n.prefix):]
 		}
 
-		// Is this a leaf? If so check if it's lower than the key (no lower bound
-		// exists).
-		if n.leaf != nil {
-			if bytes.Compare(n.leaf.key, key) < 0 {
-				i.node = nil
-				return
-			}
-
-			// We are a leaf that is greater or equal, that means we are the lower
-			// bound.
-			found(n)
-			return
-		}
-
-		// Check for key exhaustion
-		if len(search) == 0 {
-			found(n)
-			return
-		}
-
-		// Not a leaf, look for the lower bound edge
+		// Otherwise, take the lower bound next edge.
 		idx, lbNode := n.getLowerBoundEdge(search[0])
 		if lbNode == nil {
 			i.node = nil
