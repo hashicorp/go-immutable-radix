@@ -1724,8 +1724,8 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 	r := New()
 	set := []string{}
 
-	// This species a property where each call adds a new random key to the radix
-	// tree (with a null byte appended since out tree doesn't support one key
+	// This specifies a property where each call adds a new random key to the radix
+	// tree (with a null byte appended since our tree doesn't support one key
 	// being a prefix of another and treats null bytes specially).
 	//
 	// It also maintains a plain sorted list of the same set of keys and asserts
