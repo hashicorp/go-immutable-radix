@@ -88,7 +88,7 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 	}
 
 	for {
-		// Compare current prefix with the seaarch key's same-length prefix.
+		// Compare current prefix with the search key's same-length prefix.
 		var prefixCmp int
 		if len(n.prefix) < len(search) {
 			prefixCmp = bytes.Compare(n.prefix, search[0:len(n.prefix)])
