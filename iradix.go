@@ -86,6 +86,20 @@ func (t *Tree) Txn() *Txn {
 	return txn
 }
 
+// Clone makes an independent copy of the transaction. The new transaction
+// does not track any nodes and has TrackMutate turned off.
+func (t *Txn) Clone() *Txn {
+	// reset the writable node cache to avoid leaking future writes into the clone
+	t.writable = nil
+
+	txn := &Txn{
+		root: t.root,
+		snap: t.snap,
+		size: t.size,
+	}
+	return txn
+}
+
 // TrackMutate can be used to toggle if mutations are tracked. If this is enabled
 // then notifications will be issued for affected internal nodes and leaves when
 // the transaction is committed.

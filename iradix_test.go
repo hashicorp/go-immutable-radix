@@ -1774,3 +1774,33 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestClone(t *testing.T) {
+	r := New()
+
+	t1 := r.Txn()
+	t1.Insert([]byte("foo"), 7)
+	t2 := t1.Clone()
+
+	t1.Insert([]byte("bar"), 42)
+	t2.Insert([]byte("baz"), 43)
+
+	if val, ok := t1.Get([]byte("foo")); !ok || val != 7 {
+		t.Fatalf("bad foo in t1")
+	}
+	if val, ok := t2.Get([]byte("foo")); !ok || val != 7 {
+		t.Fatalf("bad foo in t2")
+	}
+	if val, ok := t1.Get([]byte("bar")); !ok || val != 42 {
+		t.Fatalf("bad bar in t1")
+	}
+	if _, ok := t2.Get([]byte("bar")); ok {
+		t.Fatalf("bar found in t2")
+	}
+	if _, ok := t1.Get([]byte("baz")); ok {
+		t.Fatalf("baz found in t1")
+	}
+	if val, ok := t2.Get([]byte("baz")); !ok || val != 43 {
+		t.Fatalf("bad baz in t2")
+	}
+}
