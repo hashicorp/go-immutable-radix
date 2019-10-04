@@ -14,7 +14,7 @@ type WalkFn func(k []byte, v interface{}) bool
 
 // DistFn is used when walking the tree to adjust
 // for the levenshtein difference in the path prefix
-type DistFn func(v interface{}, distance int) interface{}
+type DistFn func(k []byte, v interface{}, distance int) interface{}
 
 // leafNode is used to represent a value
 type leafNode struct {
@@ -266,7 +266,7 @@ func (n *Node) WalkFuzzyPrefix(prefix []byte, depth int, dfn DistFn, fn WalkFn) 
 			if !ok {
 				return false
 			}
-			v = dfn(v, distance)
+			v = dfn(k, v, distance)
 			return fn(k, v)
 		})
 	}
