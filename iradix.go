@@ -87,7 +87,7 @@ func (t *Tree) Txn() *Txn {
 }
 
 // Clone makes an independent copy of the transaction. The new transaction
-// does not track any nodes and has TrackMutate turned off.
+// does not track any nodes and has TrackMutate turned off. The cloned transaction will contain any uncommitted writes in the original transaction but further mutations to either will be independent and result in different radix trees on Commit. A cloned transaction may be passed to another goroutine and mutated there independently however each transaction may only be mutated in a single thread.
 func (t *Txn) Clone() *Txn {
 	// reset the writable node cache to avoid leaking future writes into the clone
 	t.writable = nil
