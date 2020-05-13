@@ -503,43 +503,43 @@ func TestWalkPrefix(t *testing.T) {
 		out []string
 	}
 	cases := []exp{
-		exp{
+		{
 			"f",
 			[]string{"foobar", "foo/bar/baz", "foo/baz/bar", "foo/zip/zap"},
 		},
-		exp{
+		{
 			"foo",
 			[]string{"foobar", "foo/bar/baz", "foo/baz/bar", "foo/zip/zap"},
 		},
-		exp{
+		{
 			"foob",
 			[]string{"foobar"},
 		},
-		exp{
+		{
 			"foo/",
 			[]string{"foo/bar/baz", "foo/baz/bar", "foo/zip/zap"},
 		},
-		exp{
+		{
 			"foo/b",
 			[]string{"foo/bar/baz", "foo/baz/bar"},
 		},
-		exp{
+		{
 			"foo/ba",
 			[]string{"foo/bar/baz", "foo/baz/bar"},
 		},
-		exp{
+		{
 			"foo/bar",
 			[]string{"foo/bar/baz"},
 		},
-		exp{
+		{
 			"foo/bar/baz",
 			[]string{"foo/bar/baz"},
 		},
-		exp{
+		{
 			"foo/bar/bazoo",
 			[]string{},
 		},
-		exp{
+		{
 			"z",
 			[]string{"zipzap"},
 		},
@@ -584,35 +584,35 @@ func TestWalkPath(t *testing.T) {
 		out []string
 	}
 	cases := []exp{
-		exp{
+		{
 			"f",
 			[]string{},
 		},
-		exp{
+		{
 			"foo",
 			[]string{"foo"},
 		},
-		exp{
+		{
 			"foo/",
 			[]string{"foo"},
 		},
-		exp{
+		{
 			"foo/ba",
 			[]string{"foo"},
 		},
-		exp{
+		{
 			"foo/bar",
 			[]string{"foo", "foo/bar"},
 		},
-		exp{
+		{
 			"foo/bar/baz",
 			[]string{"foo", "foo/bar", "foo/bar/baz"},
 		},
-		exp{
+		{
 			"foo/bar/bazoo",
 			[]string{"foo", "foo/bar", "foo/bar/baz"},
 		},
-		exp{
+		{
 			"z",
 			[]string{},
 		},
@@ -656,11 +656,11 @@ func TestIteratePrefix(t *testing.T) {
 		out []string
 	}
 	cases := []exp{
-		exp{
+		{
 			"",
 			keys,
 		},
-		exp{
+		{
 			"f",
 			[]string{
 				"foo/bar/baz",
@@ -669,7 +669,7 @@ func TestIteratePrefix(t *testing.T) {
 				"foobar",
 			},
 		},
-		exp{
+		{
 			"foo",
 			[]string{
 				"foo/bar/baz",
@@ -678,35 +678,35 @@ func TestIteratePrefix(t *testing.T) {
 				"foobar",
 			},
 		},
-		exp{
+		{
 			"foob",
 			[]string{"foobar"},
 		},
-		exp{
+		{
 			"foo/",
 			[]string{"foo/bar/baz", "foo/baz/bar", "foo/zip/zap"},
 		},
-		exp{
+		{
 			"foo/b",
 			[]string{"foo/bar/baz", "foo/baz/bar"},
 		},
-		exp{
+		{
 			"foo/ba",
 			[]string{"foo/bar/baz", "foo/baz/bar"},
 		},
-		exp{
+		{
 			"foo/bar",
 			[]string{"foo/bar/baz"},
 		},
-		exp{
+		{
 			"foo/bar/baz",
 			[]string{"foo/bar/baz"},
 		},
-		exp{
+		{
 			"foo/bar/bazoo",
 			[]string{},
 		},
-		exp{
+		{
 			"z",
 			[]string{"zipzap"},
 		},
@@ -1558,11 +1558,11 @@ func TestIterateLowerBound(t *testing.T) {
 		want   []string
 	}
 	cases := []exp{
-		exp{
+		{
 			fixedLenKeys,
 			"00000",
 			fixedLenKeys,
-		}, exp{
+		}, {
 			fixedLenKeys,
 			"00003",
 			[]string{
@@ -1571,7 +1571,7 @@ func TestIterateLowerBound(t *testing.T) {
 				"00020",
 				"20020",
 			},
-		}, exp{
+		}, {
 			fixedLenKeys,
 			"00010",
 			[]string{
@@ -1579,31 +1579,31 @@ func TestIterateLowerBound(t *testing.T) {
 				"00020",
 				"20020",
 			},
-		}, exp{
+		}, {
 			fixedLenKeys,
 			"20000",
 			[]string{
 				"20020",
 			},
-		}, exp{
+		}, {
 			fixedLenKeys,
 			"20020",
 			[]string{
 				"20020",
 			},
-		}, exp{
+		}, {
 			fixedLenKeys,
 			"20022",
 			[]string{},
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"A", // before all lower case letters
 			mixedLenKeys,
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"a1",
 			mixedLenKeys,
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"b",
 			[]string{
@@ -1613,7 +1613,7 @@ func TestIterateLowerBound(t *testing.T) {
 				"zap",
 				"zip",
 			},
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"bar",
 			[]string{
@@ -1623,7 +1623,7 @@ func TestIterateLowerBound(t *testing.T) {
 				"zap",
 				"zip",
 			},
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"barbazboo0",
 			[]string{
@@ -1632,11 +1632,11 @@ func TestIterateLowerBound(t *testing.T) {
 				"zap",
 				"zip",
 			},
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"zippy",
 			[]string{},
-		}, exp{
+		}, {
 			mixedLenKeys,
 			"zi",
 			[]string{
@@ -1650,7 +1650,7 @@ func TestIterateLowerBound(t *testing.T) {
 		// that into account (i.e. propagate the fact that we already know we are
 		// greater than the input key into the recursion). This would skip the first
 		// result.
-		exp{
+		{
 			[]string{
 				"bb",
 				"bc",
@@ -1660,7 +1660,7 @@ func TestIterateLowerBound(t *testing.T) {
 		},
 
 		// This is a case found by TestIterateLowerBoundFuzz.
-		exp{
+		{
 			[]string{"aaaba", "aabaa", "aabab", "aabcb", "aacca", "abaaa", "abacb", "abbcb", "abcaa", "abcba", "abcbb", "acaaa", "acaab", "acaac", "acaca", "acacb", "acbaa", "acbbb", "acbcc", "accca", "babaa", "babcc", "bbaaa", "bbacc", "bbbab", "bbbac", "bbbcc", "bbcab", "bbcca", "bbccc", "bcaac", "bcbca", "bcbcc", "bccac", "bccbc", "bccca", "caaab", "caacc", "cabac", "cabbb", "cabbc", "cabcb", "cacac", "cacbc", "cacca", "cbaba", "cbabb", "cbabc", "cbbaa", "cbbab", "cbbbc", "cbcbb", "cbcbc", "cbcca", "ccaaa", "ccabc", "ccaca", "ccacc", "ccbac", "cccaa", "cccac", "cccca"},
 			"cbacb",
 			[]string{"cbbaa", "cbbab", "cbbbc", "cbcbb", "cbcbc", "cbcca", "ccaaa", "ccabc", "ccaca", "ccacc", "ccbac", "cccaa", "cccac", "cccca"},
