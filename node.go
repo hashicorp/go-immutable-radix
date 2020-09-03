@@ -211,6 +211,12 @@ func (n *Node) Iterator() *Iterator {
 	return &Iterator{node: n}
 }
 
+// ReverseIterator is used to return an iterator at
+// the given node to walk the tree backwards
+func (n *Node) ReverseIterator() *ReverseIterator {
+	return NewReverseIterator(n)
+}
+
 // rawIterator is used to return a raw iterator at the given node to walk the
 // tree.
 func (n *Node) rawIterator() *rawIterator {
