@@ -230,6 +230,11 @@ func (n *Node) Walk(fn WalkFn) {
 	recursiveWalk(n, fn)
 }
 
+// WalkBackwards is used to walk the tree in reverse order
+func (n *Node) WalkBackwards(fn WalkFn) {
+	reverseRecursiveWalk(n, fn)
+}
+
 // WalkPrefix is used to walk the tree under a prefix
 func (n *Node) WalkPrefix(prefix []byte, fn WalkFn) {
 	search := prefix
@@ -303,6 +308,25 @@ func recursiveWalk(n *Node, fn WalkFn) bool {
 	// Recurse on the children
 	for _, e := range n.edges {
 		if recursiveWalk(e.node, fn) {
+			return true
+		}
+	}
+	return false
+}
+
+// reverseRecursiveWalk is used to do a reverse pre-order
+// walk of a node recursively. Returns true if the walk
+// should be aborted
+func reverseRecursiveWalk(n *Node, fn WalkFn) bool {
+	// Visit the leaf values if any
+	if n.leaf != nil && fn(n.leaf.key, n.leaf.val) {
+		return true
+	}
+
+	// Recurse on the children in reverse order
+	for i := len(n.edges) - 1; i >= 0; i-- {
+		e := n.edges[i]
+		if reverseRecursiveWalk(e.node, fn) {
 			return true
 		}
 	}
