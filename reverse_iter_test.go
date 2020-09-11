@@ -1,88 +1,139 @@
 package iradix
 
 import (
-	"fmt"
+	"sort"
 	"testing"
+	"testing/quick"
 )
 
-func TestReverseIterator_SeekReverseLowerBound(t *testing.T) {
+func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 	r := New()
-	keys := []string{"001", "002", "005", "010", "200", "201"}
-	for _, k := range keys {
-		r, _, _ = r.Insert([]byte(k), nil)
+	set := []string{}
+
+	// This specifies a property where each call adds a new random key to the radix
+	// tree (with a null byte appended since our tree doesn't support one key
+	// being a prefix of another and treats null bytes specially).
+	//
+	// It also maintains a plain sorted list of the same set of keys and asserts
+	// that iterating from some random key to the end using LowerBound produces
+	// the same list as filtering all sorted keys that are lower.
+
+	radixAddAndScan := func(newKey, searchKey readableString) []string {
+		// Append a null byte
+		key := []byte(newKey + "\x00")
+		r, _, _ = r.Insert(key, nil)
+
+		// Now iterate the tree from searchKey to the beginning
+		it := r.Root().ReverseIterator()
+		result := []string{}
+		it.SeekReverseLowerBound([]byte(searchKey))
+		for {
+			key, _, ok := it.Previous()
+			if !ok {
+				break
+			}
+			// Strip the null byte and append to result set
+			result = append(result, string(key[0:len(key)-1]))
+		}
+		return result
 	}
 
-	cases := []struct {
-		name            string
-		prefix          string
-		want            string
-		wantFromNonRoot string
-	}{
-		{
-			name:   "exact match",
-			prefix: "002",
-			want:   "002",
-		},
-		{
-			name:   "between leaf nodes",
-			prefix: "003",
-			want:   "002",
-		},
-		{
-			name:   "between non-leaf nodes",
-			prefix: "100",
-			want:   "010",
-		},
-		{
-			name:   "outbound low",
-			prefix: "/", // the character '/' comes before '0' in ASCII
-			want:   "",
-		},
-		{
-			name:            "outbound high",
-			prefix:          "300",
-			want:            "201",
-			wantFromNonRoot: "010",
-		},
-		{
-			name:   "long prefix low",
-			prefix: "0010",
-			want:   "",
-		},
-		{
-			name:            "long prefix high",
-			prefix:          "2010",
-			want:            "200",
-			wantFromNonRoot: "010",
-		},
+	sliceAddSortAndFilter := func(newKey, searchKey readableString) []string {
+		// Append the key to the set and re-sort
+		set = append(set, string(newKey))
+		sort.Strings(set)
+
+		result := []string{}
+		var prev string
+		for i := len(set) - 1; i >= 0; i-- {
+			k := set[i]
+			if k <= string(searchKey) && k != prev {
+				result = append(result, k)
+			}
+			prev = k
+		}
+		return result
 	}
 
-	for _, c := range cases {
-		t.Run(fmt.Sprintf("from_root/%s", c.name), func(t *testing.T) {
-			it := r.Root().ReverseIterator()
-			it.SeekReverseLowerBound([]byte(c.prefix))
-			got, _, _ := it.Previous()
+	if err := quick.CheckEqual(radixAddAndScan, sliceAddSortAndFilter, nil); err != nil {
+		t.Error(err)
+	}
+}
 
-			if string(got) != c.want {
-				t.Errorf("prefix %s seek failed: got: %s, want: %s", c.prefix, got, c.want)
+func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
+	// Some edge cases are only triggered when seeking from a non-root node,
+	// such as when looking for a key that is larger than the values currently
+	// in the tree.
+	//
+	// When starting from the root, the prefix is empty and so it will always
+	// match the subset of the search key of same length (they are both empty).
+	// The search for the lower bound will then return nil (all keys in the
+	// tree are lower than the search key) and the seek process is cut short.
+	//
+	// But when starting from a non-root node, the prefix is not empty and so
+	// it will require a recursive search for the glabal maximum in the
+	// sub-tree, which is not needed when starting from the root.
+
+	r := New()
+	set := []string{}
+	var n *Node
+
+	radixAddAndScan := func(newKey, searchKey readableString) []string {
+		// Append a null byte
+		key := []byte(newKey + "\x00")
+		r, _, _ = r.Insert(key, nil)
+
+		// Start seeking from the first root child or don't seek yet
+		if len(r.Root().edges) == 0 {
+			return []string{}
+		}
+		n = r.Root().edges[0].node
+
+		// Now iterate the tree from searchKey to the beginning
+		it := n.ReverseIterator()
+		result := []string{}
+		it.SeekReverseLowerBound([]byte(searchKey))
+		for {
+			key, _, ok := it.Previous()
+			if !ok {
+				break
 			}
-		})
+			// Strip the null byte and append to result set
+			result = append(result, string(key[0:len(key)-1]))
+		}
+		return result
+	}
 
-		t.Run(fmt.Sprintf("from_non_root/%s", c.name), func(t *testing.T) {
-			n := r.Root().edges[0].node
-			it := n.ReverseIterator()
-			it.SeekReverseLowerBound([]byte(c.prefix))
-			got, _, _ := it.Previous()
+	sliceAddSortAndFilter := func(newKey, searchKey readableString) []string {
+		// Return if the tree doesn't have a non-root node present yet
+		if n == nil {
+			return []string{}
+		}
 
-			want := c.wantFromNonRoot
-			if want == "" {
-				want = c.want
+		// Remove the null byte from the prefix if present
+		prefix := n.prefix
+		if prefix[len(prefix)-1] == byte('\x00') {
+			prefix = prefix[:len(prefix)-1]
+		}
+
+		// Append the key to the set and re-sort
+		set = append(set, string(newKey))
+		sort.Strings(set)
+
+		result := []string{}
+		var prev string
+		for i := len(set) - 1; i >= 0; i-- {
+			k := set[i]
+			if k <= string(searchKey) && k[:len(prefix)] <= string(prefix) && k != prev {
+				result = append(result, k)
 			}
+			prev = k
+		}
+		return result
+	}
 
-			if string(got) != want {
-				t.Errorf("prefix %s seek failed: got: %s, want: %s", c.prefix, got, want)
-			}
-		})
+	if err := quick.CheckEqual(radixAddAndScan, sliceAddSortAndFilter, nil); err != nil {
+		t.Error(err)
 	}
 }
 

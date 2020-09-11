@@ -34,11 +34,11 @@ func (ri *ReverseIterator) recurseMax(n *Node) *Node {
 		return n
 	}
 	if len(n.edges) > 0 {
-		// Add all the other edges to the stack (the min node will be added as
+		// Add all the other edges to the stack (the max node will be added as
 		// we recurse)
 		m := len(n.edges)
 		ri.i.stack = append(ri.i.stack, n.edges[:m-1])
-		return ri.i.recurseMin(n.edges[m-1].node)
+		return ri.recurseMax(n.edges[m-1].node)
 	}
 	// Shouldn't be possible
 	return nil
