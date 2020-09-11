@@ -128,6 +128,31 @@ func TestReverseIterator_SeekPrefix(t *testing.T) {
 	}
 }
 
+func TestReverseIterator_SeekPrefixWatch(t *testing.T) {
+	key := []byte("key")
+
+	// Create tree
+	r := New()
+	r, _, _ = r.Insert(key, nil)
+
+	// Find mutate channel
+	it := r.Root().ReverseIterator()
+	ch := it.SeekPrefixWatch(key)
+
+	// Change prefix
+	tx := r.Txn()
+	tx.TrackMutate(true)
+	tx.Insert(key, "value")
+	tx.Commit()
+
+	// Check if channel closed
+	select {
+	case <-ch:
+	default:
+		t.Errorf("channel not closed")
+	}
+}
+
 func TestReverseIterator_Previous(t *testing.T) {
 	r := New()
 	keys := []string{"001", "002", "005", "010", "100"}
