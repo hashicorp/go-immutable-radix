@@ -15,8 +15,8 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 	// being a prefix of another and treats null bytes specially).
 	//
 	// It also maintains a plain sorted list of the same set of keys and asserts
-	// that iterating from some random key to the end using LowerBound produces
-	// the same list as filtering all sorted keys that are lower.
+	// that iterating from some random key to the beginning using ReverseLowerBound
+	// produces the same list as filtering all sorted keys that are bigger.
 
 	radixAddAndScan := func(newKey, searchKey readableString) []string {
 		// Append a null byte
