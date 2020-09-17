@@ -1,3 +1,15 @@
+# UNRELEASED
+
+FEATURES
+
+* Add reverse tree traversal [[GH-30](https://github.com/hashicorp/go-immutable-radix/pull/30)]
+
+# 1.2.0 (March 18th, 2020)
+
+FEATURES
+
+* Adds a `Clone` method to `Txn` allowing transactions to be split either into two independently mutable trees. [[GH-26](https://github.com/hashicorp/go-immutable-radix/pull/26)]
+
 # 1.1.0 (May 22nd, 2019)
 
 FEATURES
