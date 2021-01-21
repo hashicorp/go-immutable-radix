@@ -74,6 +74,9 @@ type Txn struct {
 	trackChannels map[chan struct{}]struct{}
 	trackOverflow bool
 	trackMutate   bool
+
+	// modifyIndex tracks the number of modifications made in this transaction.
+	modifyIndex int64
 }
 
 // Txn starts a new transaction that can be used to mutate the tree
@@ -93,9 +96,10 @@ func (t *Txn) Clone() *Txn {
 	t.writable = nil
 
 	txn := &Txn{
-		root: t.root,
-		snap: t.snap,
-		size: t.size,
+		root:        t.root,
+		snap:        t.snap,
+		size:        t.size,
+		modifyIndex: t.modifyIndex,
 	}
 	return txn
 }
@@ -454,6 +458,7 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 // Insert is used to add or update a given key. The return provides
 // the previous value and a bool indicating if any was set.
 func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
+	t.modifyIndex++
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, v)
 	if newRoot != nil {
 		t.root = newRoot
@@ -467,6 +472,7 @@ func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
 // Delete is used to delete a given key. Returns the old value if any,
 // and a bool indicating if the key was set.
 func (t *Txn) Delete(k []byte) (interface{}, bool) {
+	t.modifyIndex++
 	newRoot, leaf := t.delete(nil, t.root, k)
 	if newRoot != nil {
 		t.root = newRoot
@@ -481,6 +487,7 @@ func (t *Txn) Delete(k []byte) (interface{}, bool) {
 // DeletePrefix is used to delete an entire subtree that matches the prefix
 // This will delete all nodes under that prefix
 func (t *Txn) DeletePrefix(prefix []byte) bool {
+	t.modifyIndex++
 	newRoot, numDeletions := t.deletePrefix(nil, t.root, prefix)
 	if newRoot != nil {
 		t.root = newRoot
@@ -496,6 +503,12 @@ func (t *Txn) DeletePrefix(prefix []byte) bool {
 // but can be used to read the current state during a transaction.
 func (t *Txn) Root() *Node {
 	return t.root
+}
+
+// IsModified returns true if at least one insert or delete has been made on
+// this transaction, otherwise returns false.
+func (t *Txn) ModifyIndex() int64 {
+	return t.modifyIndex
 }
 
 // Get is used to lookup a specific key, returning
