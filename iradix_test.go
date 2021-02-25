@@ -1551,7 +1551,10 @@ func TestIterateLowerBound(t *testing.T) {
 		"zap",
 		"zip",
 	}
-
+	specialKeys := []string{
+		string([]byte{1, 0, 1, 0, 0}),
+		string([]byte{1, 0, 1, 0, 1, 0}),
+	}
 	type exp struct {
 		keys   []string
 		search string
@@ -1664,6 +1667,36 @@ func TestIterateLowerBound(t *testing.T) {
 			[]string{"aaaba", "aabaa", "aabab", "aabcb", "aacca", "abaaa", "abacb", "abbcb", "abcaa", "abcba", "abcbb", "acaaa", "acaab", "acaac", "acaca", "acacb", "acbaa", "acbbb", "acbcc", "accca", "babaa", "babcc", "bbaaa", "bbacc", "bbbab", "bbbac", "bbbcc", "bbcab", "bbcca", "bbccc", "bcaac", "bcbca", "bcbcc", "bccac", "bccbc", "bccca", "caaab", "caacc", "cabac", "cabbb", "cabbc", "cabcb", "cacac", "cacbc", "cacca", "cbaba", "cbabb", "cbabc", "cbbaa", "cbbab", "cbbbc", "cbcbb", "cbcbc", "cbcca", "ccaaa", "ccabc", "ccaca", "ccacc", "ccbac", "cccaa", "cccac", "cccca"},
 			"cbacb",
 			[]string{"cbbaa", "cbbab", "cbbbc", "cbcbb", "cbcbc", "cbcca", "ccaaa", "ccabc", "ccaca", "ccacc", "ccbac", "cccaa", "cccac", "cccca"},
+		},
+		{
+			specialKeys,
+			"",
+			specialKeys,
+		},
+		{
+			specialKeys,
+			specialKeys[0][:4],
+			specialKeys,
+		},
+		{
+			specialKeys,
+			specialKeys[0],
+			specialKeys,
+		},
+		{
+			specialKeys,
+			specialKeys[1][:5],
+			[]string{specialKeys[1]},
+		},
+		{
+			specialKeys,
+			specialKeys[1],
+			[]string{specialKeys[1]},
+		},
+		{
+			specialKeys,
+			specialKeys[1] + "0",
+			[]string{},
 		},
 	}
 

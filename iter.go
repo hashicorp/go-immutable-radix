@@ -20,7 +20,7 @@ func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	watch = n.mutateCh
 	search := prefix
 	for {
-		// Check for key exhaution
+		// Check for key exhaustion
 		if len(search) == 0 {
 			i.node = n
 			return
@@ -132,6 +132,17 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			search = search[len(n.prefix):]
 		}
 
+		// Check for key exhaustion
+		if len(search) == 0 {
+			// Prefix is same with the search key and not leaf node, that means the lower bound is greater than the search
+			// and from now on we need to follow the minimum path to the smallest
+			// leaf under this subtree.
+			n = i.recurseMin(n)
+			if n != nil {
+				found(n)
+			}
+			return
+		}
 		// Otherwise, take the lower bound next edge.
 		idx, lbNode := n.getLowerBoundEdge(search[0])
 		if lbNode == nil {
