@@ -452,7 +452,12 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 }
 
 // Insert is used to add or update a given key. The return provides
-// the previous value and a bool indicating if any was set.
+// the previous value and a bool indicating if any was set. Note that
+// the caller must ensure that no key in the tree is a complete prefix 
+// of any other key. This might require appending a null byte to the 
+// end of each key. If this property is violated, undefined behaviour
+// could occur but no immediate error will be noticed. See README for
+// details.
 func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, v)
 	if newRoot != nil {
@@ -617,6 +622,11 @@ func (t *Txn) Notify() {
 
 // Insert is used to add or update a given key. The return provides
 // the new tree, previous value and a bool indicating if any was set.
+// Note that the caller must ensure that no key in the tree is a 
+// complete prefix of any other key. This might require appending a 
+// null byte to the end of each key. If this property is violated, 
+// undefined behaviour could occur but no immediate error will be 
+// noticed. See README for details.
 func (t *Tree) Insert(k []byte, v interface{}) (*Tree, interface{}, bool) {
 	txn := t.Txn()
 	old, ok := txn.Insert(k, v)
