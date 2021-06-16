@@ -1735,7 +1735,7 @@ type readableString string
 
 func (s readableString) Generate(rand *rand.Rand, size int) reflect.Value {
 	// Pick a random string from a limited alphabet that makes it easy to read the
-	// failure cases. Also never includes a null byte as we don't support that.
+	// failure cases.
 	const letters = "abcdefghijklmnopqrstuvwxyz/-_0123456789"
 
 	b := make([]byte, size)
@@ -1757,7 +1757,6 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 	// the same list as filtering all sorted keys that are lower.
 
 	radixAddAndScan := func(newKey, searchKey readableString) []string {
-		// Append a null byte
 		r, _, _ = r.Insert([]byte(newKey), nil)
 
 		// Now iterate the tree from searchKey to the end
@@ -1769,7 +1768,6 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 			if !ok {
 				break
 			}
-			// Strip the null byte and append to result set
 			result = append(result, string(key))
 		}
 		return result

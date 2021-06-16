@@ -11,17 +11,14 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 	set := []string{}
 
 	// This specifies a property where each call adds a new random key to the radix
-	// tree (with a null byte appended since our tree doesn't support one key
-	// being a prefix of another and treats null bytes specially).
+	// tree.
 	//
 	// It also maintains a plain sorted list of the same set of keys and asserts
 	// that iterating from some random key to the beginning using ReverseLowerBound
 	// produces the same list as filtering all sorted keys that are bigger.
 
 	radixAddAndScan := func(newKey, searchKey readableString) []string {
-		// Append a null byte
-		key := []byte(newKey + "\x00")
-		r, _, _ = r.Insert(key, nil)
+		r, _, _ = r.Insert([]byte(newKey), nil)
 
 		// Now iterate the tree from searchKey to the beginning
 		it := r.Root().ReverseIterator()
@@ -32,8 +29,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 			if !ok {
 				break
 			}
-			// Strip the null byte and append to result set
-			result = append(result, string(key[0:len(key)-1]))
+			result = append(result, string(key))
 		}
 		return result
 	}
@@ -79,9 +75,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 	var n *Node
 
 	radixAddAndScan := func(newKey, searchKey readableString) []string {
-		// Append a null byte
-		key := []byte(newKey + "\x00")
-		r, _, _ = r.Insert(key, nil)
+		r, _, _ = r.Insert([]byte(newKey), nil)
 
 		// Start seeking from the first root child or don't seek yet
 		if len(r.Root().edges) == 0 {
@@ -98,8 +92,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 			if !ok {
 				break
 			}
-			// Strip the null byte and append to result set
-			result = append(result, string(key[0:len(key)-1]))
+			result = append(result, string(key))
 		}
 		return result
 	}
@@ -110,12 +103,6 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 			return []string{}
 		}
 
-		// Remove the null byte from the prefix if present
-		prefix := n.prefix
-		if prefix[len(prefix)-1] == byte('\x00') {
-			prefix = prefix[:len(prefix)-1]
-		}
-
 		// Append the key to the set and re-sort
 		set = append(set, string(newKey))
 		sort.Strings(set)
@@ -124,7 +111,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 		var prev string
 		for i := len(set) - 1; i >= 0; i-- {
 			k := set[i]
-			if k <= string(searchKey) && k[:len(prefix)] <= string(prefix) && k != prev {
+			if k <= string(searchKey) && k[:len(n.prefix)] <= string(n.prefix) && k != prev {
 				result = append(result, k)
 			}
 			prev = k
