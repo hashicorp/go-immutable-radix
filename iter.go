@@ -115,12 +115,8 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 		}
 
 		// Prefix is equal, we are still heading for an exact match. If this is a
-		// leaf we're done.
-		if n.leaf != nil {
-			if bytes.Compare(n.leaf.key, key) < 0 {
-				i.node = nil
-				return
-			}
+		// leaf and an exact match we're done.
+		if n.leaf != nil && bytes.Equal(n.leaf.key, key) {
 			found(n)
 			return
 		}

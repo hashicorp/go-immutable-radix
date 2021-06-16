@@ -1665,6 +1665,31 @@ func TestIterateLowerBound(t *testing.T) {
 			"cbacb",
 			[]string{"cbbaa", "cbbab", "cbbbc", "cbcbb", "cbcbc", "cbcca", "ccaaa", "ccabc", "ccaca", "ccacc", "ccbac", "cccaa", "cccac", "cccca"},
 		},
+
+		// We SHOULD support keys that are prefixes of each other despite some
+		// confusion in the original implementation.
+		{
+			[]string{"f", "fo", "foo", "food", "bug"},
+			"foo",
+			[]string{"foo", "food"},
+		},
+
+		// We also support the empty key as a valid key to insert and search for.
+		{
+			[]string{"f", "fo", "foo", "food", "bug", ""},
+			"foo",
+			[]string{"foo", "food"},
+		},
+		{
+			[]string{"f", "bug", ""},
+			"",
+			[]string{"", "bug", "f"},
+		},
+		{
+			[]string{"f", "bug", "xylophone"},
+			"",
+			[]string{"bug", "f", "xylophone"},
+		},
 	}
 
 	for idx, test := range cases {
@@ -1725,8 +1750,7 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 	set := []string{}
 
 	// This specifies a property where each call adds a new random key to the radix
-	// tree (with a null byte appended since our tree doesn't support one key
-	// being a prefix of another and treats null bytes specially).
+	// tree.
 	//
 	// It also maintains a plain sorted list of the same set of keys and asserts
 	// that iterating from some random key to the end using LowerBound produces
@@ -1734,8 +1758,7 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 
 	radixAddAndScan := func(newKey, searchKey readableString) []string {
 		// Append a null byte
-		key := []byte(newKey + "\x00")
-		r, _, _ = r.Insert(key, nil)
+		r, _, _ = r.Insert([]byte(newKey), nil)
 
 		// Now iterate the tree from searchKey to the end
 		it := r.Root().Iterator()
@@ -1747,7 +1770,7 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 				break
 			}
 			// Strip the null byte and append to result set
-			result = append(result, string(key[0:len(key)-1]))
+			result = append(result, string(key))
 		}
 		return result
 	}
