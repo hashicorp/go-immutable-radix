@@ -9,20 +9,14 @@ import (
 type ReverseIterator struct {
 	i *Iterator
 
-	// Unlike forward iteration we need to track parent nodes that have already
-	// had their children pushed to the stack because internal nodes may also be
-	// leaves but we need to return all of their children (who must be greater
-	// than them) before we can return them. If we just pushed them back onto the
-	// stack without marking them in some other way we'd end up in an infinite
-	// loop, if we don't push them back we'd end up skipping them, or skipping all
-	// their children. This map stores the set of parent nodes that we have
-	// descended through while walking the stack but that still need to have their
-	// leaf values returned when we are done with all their children.
+	// expandedParents stores the set of parent nodes whose relevant children have
+	// already been pushed into the stack. This can happen during seek or during
+	// iteration.
 	//
-	// SeekReverseLowerBound also has to set this on internal leaves it traverses
-	// through since it will already be adding any relevant children it finds to
-	// the stack so the iterator shouldn't walk into it's children again when it
-	// gets to it in the stack.
+	// Unlike forward iteration we need to recurse into children before we can
+	// output the value stored in an internal leaf since all children are greater.
+	// We use this to track whether we have already ensured all the children are
+	// in the stack.
 	expandedParents map[*Node]struct{}
 }
 
@@ -118,7 +112,10 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			return
 		}
 
-		// If this is a leaf, something needs to happen!
+		// If this is a leaf, something needs to happen! Note that if it's a leaf
+		// and prefixCmp was zero (which it must be to get here) then the leaf value
+		// is either an exact match for the search, or it's lower. It can't be
+		// greater.
 		if n.isLeaf() {
 
 			// Firstly, if it's an exact match, we're done!
@@ -127,26 +124,20 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 				return
 			}
 
-			// If not exact, and it has no children then we are also done, decide if
-			// it's the lowerBound of if none exists.
+			// It's not so this node's leaf value must be lower and could still be a
+			// valide contender for reverse lower bound.
+
+			// If it has no children then we are also done.
 			if len(n.edges) == 0 {
-				if bytes.Compare(n.leaf.key, key) > 0 {
-					// This leaf is greater than the search key so no reverse lower bound
-					// exists in this subtree. There may be one in another leaf to the
-					// left of the path we took which will already be in the iterator's
-					// stack.
-					ri.i.node = nil
-					return
-				}
-				// this leaf is the lower bound.
+				// This leaf is the lower bound.
 				found(n)
 				return
 			}
 
-			// Finally, this leaf is internal and has children so we'll keep
-			// searching, but we need to add it to the iterator's stack since it has a
-			// leaf value that needs to be iterated over. It needs to be added to the
-			// stack before it's children below as it comes first.
+			// Finally, this leaf is internal (has children) so we'll keep searching,
+			// but we need to add it to the iterator's stack since it has a leaf value
+			// that needs to be iterated over. It needs to be added to the stack
+			// before it's children below as it comes first.
 			ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
 			// We also need to mark it as expanded since we'll be adding any of it's
 			// relevant children below and so don't want the iterator to re-add them
