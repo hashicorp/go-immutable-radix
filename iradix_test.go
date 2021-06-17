@@ -1532,26 +1532,29 @@ func TestLenTxn(t *testing.T) {
 	}
 }
 
+// these should be defined in order
+var fixedLenKeys = []string{
+	"00000",
+	"00001",
+	"00004",
+	"00010",
+	"00020",
+	"20020",
+}
+
+// these should be defined in order
+var mixedLenKeys = []string{
+	"a1",
+	"abc",
+	"barbazboo",
+	"f",
+	"foo",
+	"found",
+	"zap",
+	"zip",
+}
+
 func TestIterateLowerBound(t *testing.T) {
-	fixedLenKeys := []string{
-		"00000",
-		"00001",
-		"00004",
-		"00010",
-		"00020",
-		"20020",
-	}
-
-	mixedLenKeys := []string{
-		"a1",
-		"abc",
-		"barbazboo",
-		"foo",
-		"found",
-		"zap",
-		"zip",
-	}
-
 	type exp struct {
 		keys   []string
 		search string
@@ -1562,7 +1565,8 @@ func TestIterateLowerBound(t *testing.T) {
 			fixedLenKeys,
 			"00000",
 			fixedLenKeys,
-		}, {
+		},
+		{
 			fixedLenKeys,
 			"00003",
 			[]string{
@@ -1571,7 +1575,8 @@ func TestIterateLowerBound(t *testing.T) {
 				"00020",
 				"20020",
 			},
-		}, {
+		},
+		{
 			fixedLenKeys,
 			"00010",
 			[]string{
@@ -1579,64 +1584,77 @@ func TestIterateLowerBound(t *testing.T) {
 				"00020",
 				"20020",
 			},
-		}, {
+		},
+		{
 			fixedLenKeys,
 			"20000",
 			[]string{
 				"20020",
 			},
-		}, {
+		},
+		{
 			fixedLenKeys,
 			"20020",
 			[]string{
 				"20020",
 			},
-		}, {
+		},
+		{
 			fixedLenKeys,
 			"20022",
 			[]string{},
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"A", // before all lower case letters
 			mixedLenKeys,
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"a1",
 			mixedLenKeys,
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"b",
 			[]string{
 				"barbazboo",
+				"f",
 				"foo",
 				"found",
 				"zap",
 				"zip",
 			},
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"bar",
 			[]string{
 				"barbazboo",
+				"f",
 				"foo",
 				"found",
 				"zap",
 				"zip",
 			},
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"barbazboo0",
 			[]string{
+				"f",
 				"foo",
 				"found",
 				"zap",
 				"zip",
 			},
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"zippy",
 			[]string{},
-		}, {
+		},
+		{
 			mixedLenKeys,
 			"zi",
 			[]string{
@@ -1674,7 +1692,8 @@ func TestIterateLowerBound(t *testing.T) {
 			[]string{"foo", "food"},
 		},
 
-		// We also support the empty key as a valid key to insert and search for.
+		// We also support the empty key (which is a prefix of every other key) as a
+		// valid key to insert and search for.
 		{
 			[]string{"f", "fo", "foo", "food", "bug", ""},
 			"foo",
@@ -1689,6 +1708,14 @@ func TestIterateLowerBound(t *testing.T) {
 			[]string{"f", "bug", "xylophone"},
 			"",
 			[]string{"bug", "f", "xylophone"},
+		},
+
+		// This is a case we realized we were not covering while fixing
+		// SeekReverseLowerBound and could panic before.
+		{
+			[]string{"bar", "foo00", "foo11"},
+			"foo",
+			[]string{"foo00", "foo11"},
 		},
 	}
 

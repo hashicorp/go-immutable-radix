@@ -20,7 +20,7 @@ func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	watch = n.mutateCh
 	search := prefix
 	for {
-		// Check for key exhaution
+		// Check for key exhaustion
 		if len(search) == 0 {
 			i.node = n
 			return
@@ -87,6 +87,16 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 		i.stack = append(i.stack, edges{edge{node: n}})
 	}
 
+	findMin := func(n *Node) {
+		n = i.recurseMin(n)
+		if n != nil {
+			found(n)
+			return
+		}
+		i.node = nil
+		return
+	}
+
 	for {
 		// Compare current prefix with the search key's same-length prefix.
 		var prefixCmp int
@@ -100,10 +110,7 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			// Prefix is larger, that means the lower bound is greater than the search
 			// and from now on we need to follow the minimum path to the smallest
 			// leaf under this subtree.
-			n = i.recurseMin(n)
-			if n != nil {
-				found(n)
-			}
+			findMin(n)
 			return
 		}
 
@@ -121,11 +128,18 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			return
 		}
 
-		// Consume the search prefix
-		if len(n.prefix) > len(search) {
-			search = []byte{}
-		} else {
-			search = search[len(n.prefix):]
+		// Consume the search prefix if the current node has one. Note that this is
+		// safe because if n.prefix is longer than the search slice prefixCmp would
+		// have been > 0 above and the method would have already returned.
+		search = search[len(n.prefix):]
+
+		if len(search) == 0 {
+			// We've exhausted the search key, but the current node is not an exact
+			// match or not a leaf. That means that the leaf value if it exists, and
+			// all child nodes must be strictly greater, the smallest key in this
+			// subtree must be the lower bound.
+			findMin(n)
+			return
 		}
 
 		// Otherwise, take the lower bound next edge.

@@ -1,6 +1,8 @@
 package iradix
 
 import (
+	"fmt"
+	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
@@ -67,7 +69,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 	// tree are lower than the search key) and the seek process is cut short.
 	//
 	// But when starting from a non-root node, the prefix is not empty and so
-	// it will require a recursive search for the glabal maximum in the
+	// it will require a recursive search for the global maximum in the
 	// sub-tree, which is not needed when starting from the root.
 
 	r := New()
@@ -121,6 +123,187 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 
 	if err := quick.CheckEqual(radixAddAndScan, sliceAddSortAndFilter, nil); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestReverseIterator_SeekLowerBound(t *testing.T) {
+
+	var revFixedLenKeys, revMixedLenKeys []string
+
+	for i := len(fixedLenKeys) - 1; i >= 0; i-- {
+		revFixedLenKeys = append(revFixedLenKeys, fixedLenKeys[i])
+	}
+	for i := len(mixedLenKeys) - 1; i >= 0; i-- {
+		revMixedLenKeys = append(revMixedLenKeys, mixedLenKeys[i])
+	}
+
+	type exp struct {
+		keys   []string
+		search string
+		want   []string
+	}
+	cases := []exp{
+		{
+			fixedLenKeys,
+			"20020",
+			revFixedLenKeys,
+		},
+		{
+			fixedLenKeys,
+			"20000",
+			[]string{
+				"00020",
+				"00010",
+				"00004",
+				"00001",
+				"00000",
+			},
+		},
+		{
+			fixedLenKeys,
+			"00010",
+			[]string{
+				"00010",
+				"00004",
+				"00001",
+				"00000",
+			},
+		},
+		{
+			fixedLenKeys,
+			"00000",
+			[]string{
+				"00000",
+			},
+		},
+		{
+			fixedLenKeys,
+			"0",
+			[]string{},
+		},
+		{
+			mixedLenKeys,
+			"{", // after all lower case letters
+			revMixedLenKeys,
+		},
+		{
+			mixedLenKeys,
+			"zip",
+			revMixedLenKeys,
+		},
+		{
+			mixedLenKeys,
+			"b",
+			[]string{
+				"abc",
+				"a1",
+			},
+		},
+		{
+			mixedLenKeys,
+			"barbazboo0",
+			[]string{
+				"barbazboo",
+				"abc",
+				"a1",
+			},
+		},
+		{
+			mixedLenKeys,
+			"a",
+			[]string{},
+		},
+		{
+			mixedLenKeys,
+			"a1",
+			[]string{
+				"a1",
+			},
+		},
+
+		// We SHOULD support keys that are prefixes of each other despite some
+		// confusion in the original implementation.
+		{
+			[]string{"f", "fo", "foo", "food", "bug"},
+			"foo",
+			[]string{"foo", "fo", "f", "bug"},
+		},
+		{
+			[]string{"f", "fo", "foo", "food", "bug"},
+			"foozzzzzzzzzz", // larger than any key but with shared prefix
+			[]string{"food", "foo", "fo", "f", "bug"},
+		},
+
+		// We also support the empty key (which is a prefix of every other key) as a
+		// valid key to insert and search for.
+		{
+			[]string{"f", "fo", "foo", "food", "bug", ""},
+			"foo",
+			[]string{"foo", "fo", "f", "bug", ""},
+		},
+		{
+			[]string{"f", "bug", ""},
+			"",
+			[]string{""},
+		},
+		{
+			[]string{"f", "bug", "xylophone"},
+			"",
+			[]string{},
+		},
+
+		// This case could panic before. it involves a node with a shared prefix and
+		// children where the reverse lower bound is greater than all the children
+		{
+			[]string{"foo00", "foo11"},
+			"foo",
+			[]string{},
+		},
+
+		// When fixing the panic above the above test could pass but we need to
+		// verify the logic is still correct in the case there was a lower bound in
+		// another node.
+		{
+			[]string{"bar", "foo00", "foo11"},
+			"foo",
+			[]string{"bar"},
+		},
+	}
+
+	for idx, test := range cases {
+		t.Run(fmt.Sprintf("case%03d", idx), func(t *testing.T) {
+			r := New()
+
+			// Insert keys
+			for _, k := range test.keys {
+				var ok bool
+				r, _, ok = r.Insert([]byte(k), nil)
+				if ok {
+					t.Fatalf("duplicate key %s in keys", k)
+				}
+			}
+			if r.Len() != len(test.keys) {
+				t.Fatal("failed adding keys")
+			}
+			// Get and seek iterator
+			root := r.Root()
+			iter := root.ReverseIterator()
+			iter.SeekReverseLowerBound([]byte(test.search))
+
+			// Consume all the keys
+			out := []string{}
+			for {
+				key, _, ok := iter.Previous()
+				if !ok {
+					break
+				}
+				out = append(out, string(key))
+			}
+			if !reflect.DeepEqual(out, test.want) {
+				t.Fatalf("mis-match: key=%s\n  got=%v\n  want=%v", test.search,
+					out, test.want)
+			}
+		})
 	}
 }
 

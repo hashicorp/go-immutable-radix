@@ -8,6 +8,22 @@ import (
 // in reverse in-order
 type ReverseIterator struct {
 	i *Iterator
+
+	// Unlike forward iteration we need to track parent nodes that have already
+	// had their children pushed to the stack because internal nodes may also be
+	// leaves but we need to return all of their children (who must be greater
+	// than them) before we can return them. If we just pushed them back onto the
+	// stack without marking them in some other way we'd end up in an infinite
+	// loop, if we don't push them back we'd end up skipping them, or skipping all
+	// their children. This map stores the set of parent nodes that we have
+	// descended through while walking the stack but that still need to have their
+	// leaf values returned when we are done with all their children.
+	//
+	// SeekReverseLowerBound also has to set this on internal leaves it traverses
+	// through since it will already be adding any relevant children it finds to
+	// the stack so the iterator shouldn't walk into it's children again when it
+	// gets to it in the stack.
+	expandedParents map[*Node]struct{}
 }
 
 // NewReverseIterator returns a new ReverseIterator at a node
@@ -56,9 +72,19 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 	n := ri.i.node
 	search := key
 
+	if ri.expandedParents == nil {
+		ri.expandedParents = make(map[*Node]struct{})
+	}
+
 	found := func(n *Node) {
 		ri.i.node = n
 		ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
+		// We need to mark this node as expanded in advance too otherwise the
+		// iterator will attempt to walk all of it's children even though they are
+		// greater than the lower bound we have found. We've expanded it in the
+		// sense that all of it's children that we want to walk are already in the
+		// stack (i.e. none of them).
+		ri.expandedParents[n] = struct{}{}
 	}
 
 	for {
@@ -84,28 +110,64 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 		}
 
 		if prefixCmp > 0 {
-			// Prefix is larger than search prefix, that means there is no reverse lower
-			// bound since nothing comes before our current search prefix.
+			// Prefix is larger than search prefix, or there is no prefix but we've
+			// also exhausted the search key. Either way, that means there is no
+			// reverse lower bound since nothing comes before our current search
+			// prefix.
 			ri.i.node = nil
 			return
 		}
 
-		// Prefix is equal, we are still heading for an exact match. If this is a
-		// leaf we're done.
-		if n.leaf != nil {
-			if bytes.Compare(n.leaf.key, key) < 0 {
-				ri.i.node = nil
+		// If this is a leaf, something needs to happen!
+		if n.isLeaf() {
+
+			// Firstly, if it's an exact match, we're done!
+			if bytes.Equal(n.leaf.key, key) {
+				found(n)
 				return
 			}
-			found(n)
-			return
+
+			// If not exact, and it has no children then we are also done, decide if
+			// it's the lowerBound of if none exists.
+			if len(n.edges) == 0 {
+				if bytes.Compare(n.leaf.key, key) > 0 {
+					// This leaf is greater than the search key so no reverse lower bound
+					// exists in this subtree. There may be one in another leaf to the
+					// left of the path we took which will already be in the iterator's
+					// stack.
+					ri.i.node = nil
+					return
+				}
+				// this leaf is the lower bound.
+				found(n)
+				return
+			}
+
+			// Finally, this leaf is internal and has children so we'll keep
+			// searching, but we need to add it to the iterator's stack since it has a
+			// leaf value that needs to be iterated over. It needs to be added to the
+			// stack before it's children below as it comes first.
+			ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
+			// We also need to mark it as expanded since we'll be adding any of it's
+			// relevant children below and so don't want the iterator to re-add them
+			// on it's way back up the stack.
+			ri.expandedParents[n] = struct{}{}
 		}
 
-		// Consume the search prefix
-		if len(n.prefix) > len(search) {
-			search = []byte{}
-		} else {
-			search = search[len(n.prefix):]
+		// Consume the search prefix. Note that this is safe because if n.prefix is
+		// longer than the search slice prefixCmp would have been > 0 above and the
+		// method would have already returned.
+		search = search[len(n.prefix):]
+
+		if len(search) == 0 {
+			// We've exhausted the search key but we are not at a leaf. That means all
+			// children are greater than the search key so a reverse lower bound
+			// doesn't exist in this subtree. Note that there might still be one in
+			// the whole radix tree by following a different path somewhere further
+			// up. If that's the case then the iterator's stack will contain all the
+			// smaller nodes already and Previous will walk through them correctly.
+			ri.i.node = nil
+			return
 		}
 
 		// Otherwise, take the lower bound next edge.
@@ -125,8 +187,8 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			ri.i.stack = append(ri.i.stack, n.edges[:idx])
 		}
 
-		// Exit if there's not lower bound edge. The stack will have the
-		// previous nodes already.
+		// Exit if there's no lower bound edge. The stack will have the previous
+		// nodes already.
 		if lbNode == nil {
 			ri.i.node = nil
 			return
@@ -149,6 +211,10 @@ func (ri *ReverseIterator) Previous() ([]byte, interface{}, bool) {
 		}
 	}
 
+	if ri.expandedParents == nil {
+		ri.expandedParents = make(map[*Node]struct{})
+	}
+
 	for len(ri.i.stack) > 0 {
 		// Inspect the last element of the stack
 		n := len(ri.i.stack)
@@ -156,22 +222,38 @@ func (ri *ReverseIterator) Previous() ([]byte, interface{}, bool) {
 		m := len(last)
 		elem := last[m-1].node
 
-		// Update the stack
+		_, alreadyExpanded := ri.expandedParents[elem]
+
+		// If this is an internal node and we've not seen it already, we need to
+		// leave it in the stack so we can return its posssible leaf value _after_
+		// we've recursed through all it's children.
+		if len(elem.edges) > 0 && !alreadyExpanded {
+			// record that we've seen this node!
+			ri.expandedParents[elem] = struct{}{}
+			// push child edges onto stack and skip the rest of the loop to recurse
+			// into the largest one.
+			ri.i.stack = append(ri.i.stack, elem.edges)
+			continue
+		}
+
+		// Remove the node from the stack
 		if m > 1 {
 			ri.i.stack[n-1] = last[:m-1]
 		} else {
 			ri.i.stack = ri.i.stack[:n-1]
 		}
-
-		// Push the edges onto the frontier
-		if len(elem.edges) > 0 {
-			ri.i.stack = append(ri.i.stack, elem.edges)
+		// We don't need this state any more as it's no longer in the stack so we
+		// won't visit it again
+		if alreadyExpanded {
+			delete(ri.expandedParents, elem)
 		}
 
-		// Return the leaf values if any
+		// If this is a leaf, return it
 		if elem.leaf != nil {
 			return elem.leaf.key, elem.leaf.val, true
 		}
+
+		// it's not a leaf so keep walking the stack to find the previous leaf
 	}
 	return nil, nil, false
 }
