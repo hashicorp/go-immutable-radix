@@ -38,22 +38,6 @@ func (ri *ReverseIterator) SeekPrefix(prefix []byte) {
 	ri.i.SeekPrefixWatch(prefix)
 }
 
-func (ri *ReverseIterator) recurseMax(n *Node) *Node {
-	// Traverse to the maximum child
-	if n.leaf != nil {
-		return n
-	}
-	if len(n.edges) > 0 {
-		// Add all the other edges to the stack (the max node will be added as
-		// we recurse)
-		m := len(n.edges)
-		ri.i.stack = append(ri.i.stack, n.edges[:m-1])
-		return ri.recurseMax(n.edges[m-1].node)
-	}
-	// Shouldn't be possible
-	return nil
-}
-
 // SeekReverseLowerBound is used to seek the iterator to the largest key that is
 // lower or equal to the given key. There is no watch variant as it's hard to
 // predict based on the radix structure which node(s) changes might affect the
@@ -91,15 +75,17 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 		}
 
 		if prefixCmp < 0 {
-			// Prefix is smaller than search prefix, that means there is no lower bound.
-			// But we are looking in reverse, so the reverse lower bound will be the
-			// largest leaf under this subtree, since it is the value that would come
-			// right before the current search prefix if it were in the tree. So we need
-			// to follow the maximum path in this subtree to find it.
-			n = ri.recurseMax(n)
-			if n != nil {
-				found(n)
-			}
+			// Prefix is smaller than search prefix, that means there is no lower
+			// bound. But we are looking in reverse, so the reverse lower bound will
+			// be the largest leaf under this subtree, since it is the value that
+			// would come right before the current search prefix if it were in the
+			// tree. So we need to follow the maximum path in this subtree to find it.
+			// Note that this is exactly what the iterator will already do if it find
+			// a node in the stack that has _not_ been marked as expanded so in this
+			// one case we don't call `found` and just let the iterator do it's
+			// expansion and recursion through all the children.
+			ri.i.node = n
+			ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
 			return
 		}
 
@@ -216,8 +202,8 @@ func (ri *ReverseIterator) Previous() ([]byte, interface{}, bool) {
 		_, alreadyExpanded := ri.expandedParents[elem]
 
 		// If this is an internal node and we've not seen it already, we need to
-		// leave it in the stack so we can return its posssible leaf value _after_
-		// we've recursed through all it's children.
+		// leave it in the stack so we can return its possible leaf value _after_
+		// we've recursed through all its children.
 		if len(elem.edges) > 0 && !alreadyExpanded {
 			// record that we've seen this node!
 			ri.expandedParents[elem] = struct{}{}

@@ -51,83 +51,10 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 			// Note we don't just store the last string to compare because empty
 			// string is a valid value in the set and makes comparing on the first
 			// iteration awkward.
-			if i < len(set)-2 && set[i+1] == k {
+			if i < len(set)-1 && set[i+1] == k {
 				continue
 			}
 			if k <= string(searchKey) {
-				result = append(result, k)
-			}
-		}
-		return result
-	}
-
-	if err := quick.CheckEqual(radixAddAndScan, sliceAddSortAndFilter, nil); err != nil {
-		t.Error(err)
-	}
-}
-
-func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
-	// Some edge cases are only triggered when seeking from a non-root node,
-	// such as when looking for a key that is larger than the values currently
-	// in the tree.
-	//
-	// When starting from the root, the prefix is empty and so it will always
-	// match the subset of the search key of same length (they are both empty).
-	// The search for the lower bound will then return nil (all keys in the
-	// tree are lower than the search key) and the seek process is cut short.
-	//
-	// But when starting from a non-root node, the prefix is not empty and so
-	// it will require a recursive search for the global maximum in the
-	// sub-tree, which is not needed when starting from the root.
-
-	r := New()
-	set := []string{}
-	var n *Node
-
-	radixAddAndScan := func(newKey, searchKey readableString) []string {
-		r, _, _ = r.Insert([]byte(newKey), nil)
-
-		// Start seeking from the first root child or don't seek yet
-		if len(r.Root().edges) == 0 {
-			return []string{}
-		}
-		n = r.Root().edges[0].node
-
-		// Now iterate the tree from searchKey to the beginning
-		it := n.ReverseIterator()
-		result := []string{}
-		it.SeekReverseLowerBound([]byte(searchKey))
-		for {
-			key, _, ok := it.Previous()
-			if !ok {
-				break
-			}
-			result = append(result, string(key))
-		}
-		return result
-	}
-
-	sliceAddSortAndFilter := func(newKey, searchKey readableString) []string {
-		// Return if the tree doesn't have a non-root node present yet
-		if n == nil {
-			return []string{}
-		}
-
-		// Append the key to the set and re-sort
-		set = append(set, string(newKey))
-		sort.Strings(set)
-
-		result := []string{}
-		for i := len(set) - 1; i >= 0; i-- {
-			k := set[i]
-			// Check this is not a duplicate of the previous value we just included.
-			// Note we don't just store the last string to compare because empty
-			// string is a valid value in the set and makes comparing on the first
-			// iteration awkward.
-			if i < len(set)-2 && set[i+1] == k {
-				continue
-			}
-			if k <= string(searchKey) && k[:len(n.prefix)] <= string(n.prefix) {
 				result = append(result, k)
 			}
 		}
@@ -282,12 +209,17 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 			[]string{"bar"},
 		},
 
-		// Found by fuzz test to hit code that wasn't covered by any other example
+		// Found by fuzz test that hit code that wasn't covered by any other example
 		// here.
 		{
 			[]string{"bdgedcdc", "agcbcaba"},
 			"beefdafg",
 			[]string{"bdgedcdc", "agcbcaba"},
+		},
+		{
+			[]string{"", "acc", "accea", "accgbbb", "b", "bdebfc", "bdfdcbb", "becccc", "bgefcfc", "c", "cab", "cbd", "cgeaff", "cggfbcb", "cggge", "dcgbd", "ddd", "decfd", "dgb", "e", "edaffec", "ee", "eedc", "efafdbd", "eg", "egf", "egfcd", "f", "fggfdad", "g", "gageecc", "ggd"},
+			"adgba",
+			[]string{"accgbbb", "accea", "acc", ""},
 		},
 	}
 
