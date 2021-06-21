@@ -244,7 +244,7 @@ func (ri *ReverseIterator) Previous() ([]byte, interface{}, bool) {
 			return elem.leaf.key, elem.leaf.val, true
 		}
 
-		// it's not a leaf so keep walking the stack to find the previous leaf
+		// it's not a leaf so keep walking the stack to find the previous leafq
 	}
 	return nil, nil, false
 }

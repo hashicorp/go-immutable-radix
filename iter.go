@@ -60,10 +60,13 @@ func (i *Iterator) recurseMin(n *Node) *Node {
 	if n.leaf != nil {
 		return n
 	}
-	if len(n.edges) > 0 {
+	nEdges := len(n.edges)
+	if nEdges > 1 {
 		// Add all the other edges to the stack (the min node will be added as
 		// we recurse)
 		i.stack = append(i.stack, n.edges[1:])
+	}
+	if nEdges > 0 {
 		return i.recurseMin(n.edges[0].node)
 	}
 	// Shouldn't be possible

@@ -41,14 +41,22 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 		set = append(set, string(newKey))
 		sort.Strings(set)
 
+		t.Logf("Current Set: %#v", set)
+		t.Logf("Search Key: %#v %v", searchKey, "" >= string(searchKey))
+
 		result := []string{}
-		var prev string
 		for i := len(set) - 1; i >= 0; i-- {
 			k := set[i]
-			if k <= string(searchKey) && k != prev {
+			// Check this is not a duplicate of the previous value we just included.
+			// Note we don't just store the last string to compare because empty
+			// string is a valid value in the set and makes comparing on the first
+			// iteration awkward.
+			if i < len(set)-2 && set[i+1] == k {
+				continue
+			}
+			if k <= string(searchKey) {
 				result = append(result, k)
 			}
-			prev = k
 		}
 		return result
 	}
@@ -110,13 +118,18 @@ func TestReverseIterator_SeekReverseLowerBoundFuzzFromNonRoot(t *testing.T) {
 		sort.Strings(set)
 
 		result := []string{}
-		var prev string
 		for i := len(set) - 1; i >= 0; i-- {
 			k := set[i]
-			if k <= string(searchKey) && k[:len(n.prefix)] <= string(n.prefix) && k != prev {
+			// Check this is not a duplicate of the previous value we just included.
+			// Note we don't just store the last string to compare because empty
+			// string is a valid value in the set and makes comparing on the first
+			// iteration awkward.
+			if i < len(set)-2 && set[i+1] == k {
+				continue
+			}
+			if k <= string(searchKey) && k[:len(n.prefix)] <= string(n.prefix) {
 				result = append(result, k)
 			}
-			prev = k
 		}
 		return result
 	}
@@ -267,6 +280,14 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 			[]string{"bar", "foo00", "foo11"},
 			"foo",
 			[]string{"bar"},
+		},
+
+		// Found by fuzz test to hit code that wasn't covered by any other example
+		// here.
+		{
+			[]string{"bdgedcdc", "agcbcaba"},
+			"beefdafg",
+			[]string{"bdgedcdc", "agcbcaba"},
 		},
 	}
 

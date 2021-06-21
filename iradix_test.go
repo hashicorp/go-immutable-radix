@@ -1684,6 +1684,13 @@ func TestIterateLowerBound(t *testing.T) {
 			[]string{"cbbaa", "cbbab", "cbbbc", "cbcbb", "cbcbc", "cbcca", "ccaaa", "ccabc", "ccaca", "ccacc", "ccbac", "cccaa", "cccac", "cccca"},
 		},
 
+		// Panic case found be TestIterateLowerBoundFuzz.
+		{
+			[]string{"gcgc"},
+			"",
+			[]string{"gcgc"},
+		},
+
 		// We SHOULD support keys that are prefixes of each other despite some
 		// confusion in the original implementation.
 		{
@@ -1737,9 +1744,7 @@ func TestIterateLowerBound(t *testing.T) {
 			// Get and seek iterator
 			root := r.Root()
 			iter := root.Iterator()
-			if test.search != "" {
-				iter.SeekLowerBound([]byte(test.search))
-			}
+			iter.SeekLowerBound([]byte(test.search))
 
 			// Consume all the keys
 			out := []string{}
@@ -1763,7 +1768,11 @@ type readableString string
 func (s readableString) Generate(rand *rand.Rand, size int) reflect.Value {
 	// Pick a random string from a limited alphabet that makes it easy to read the
 	// failure cases.
-	const letters = "abcdefghijklmnopqrstuvwxyz/-_0123456789"
+	const letters = "abcdefg"
+
+	// Ignore size and make them all shortish to provoke bigger chance of hitting
+	// prefixes and more intersting tree shapes.
+	size = rand.Intn(8)
 
 	b := make([]byte, size)
 	for i := range b {
@@ -1786,6 +1795,8 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 	radixAddAndScan := func(newKey, searchKey readableString) []string {
 		r, _, _ = r.Insert([]byte(newKey), nil)
 
+		t.Logf("NewKey: %q, SearchKey: %q", newKey, searchKey)
+
 		// Now iterate the tree from searchKey to the end
 		it := r.Root().Iterator()
 		result := []string{}
@@ -1806,14 +1817,19 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 		sort.Strings(set)
 
 		t.Logf("Current Set: %#v", set)
+		t.Logf("Search Key: %#v %v", searchKey, "" >= string(searchKey))
 
 		result := []string{}
-		var prev string
-		for _, k := range set {
-			if k >= string(searchKey) && k != prev {
+		for i, k := range set {
+			// Check this is not a duplicate of the previous value. Note we don't just
+			// store the last string to compare because empty string is a valid value
+			// in the set and makes comparing on the first iteration awkward.
+			if i > 0 && set[i-1] == k {
+				continue
+			}
+			if k >= string(searchKey) {
 				result = append(result, k)
 			}
-			prev = k
 		}
 		return result
 	}
