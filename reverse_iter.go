@@ -83,16 +83,15 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 		}
 
 		if prefixCmp < 0 {
-			// Prefix is smaller than search prefix, that means there is no lower
-			// bound. But we are looking in reverse, so the reverse lower bound will
-			// be the largest leaf under this subtree, since it is the value that
-			// would come right before the current search prefix if it were in the
-			// tree. So we need to follow the maximum path in this subtree to find it.
-			// Note that this is exactly what the iterator will already do if it find
-			// a node in the stack that has _not_ been marked as expanded so in this
-			// one case we don't call `found` and just let the iterator do its
-			// expansion and recursion through all the children.
-			ri.i.node = n
+			// Prefix is smaller than search prefix, that means there is no exact
+			// match for the search key. But we are looking in reverse, so the reverse
+			// lower bound will be the largest leaf under this subtree, since it is
+			// the value that would come right before the current search key if it
+			// were in the tree. So we need to follow the maximum path in this subtree
+			// to find it. Note that this is exactly what the iterator will already do
+			// if it finds a node in the stack that has _not_ been marked as expanded
+			// so in this one case we don't call `found` and instead let the iterator
+			// do the expansion and recursion through all the children.
 			ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
 			return
 		}
