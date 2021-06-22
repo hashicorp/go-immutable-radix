@@ -66,9 +66,9 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 	found := func(n *Node) {
 		ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
 		// We need to mark this node as expanded in advance too otherwise the
-		// iterator will attempt to walk all of it's children even though they are
+		// iterator will attempt to walk all of its children even though they are
 		// greater than the lower bound we have found. We've expanded it in the
-		// sense that all of it's children that we want to walk are already in the
+		// sense that all of its children that we want to walk are already in the
 		// stack (i.e. none of them).
 		ri.expandedParents[n] = struct{}{}
 	}
@@ -90,7 +90,7 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			// tree. So we need to follow the maximum path in this subtree to find it.
 			// Note that this is exactly what the iterator will already do if it find
 			// a node in the stack that has _not_ been marked as expanded so in this
-			// one case we don't call `found` and just let the iterator do it's
+			// one case we don't call `found` and just let the iterator do its
 			// expansion and recursion through all the children.
 			ri.i.node = n
 			ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
@@ -118,7 +118,7 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			}
 
 			// It's not so this node's leaf value must be lower and could still be a
-			// valide contender for reverse lower bound.
+			// valid contender for reverse lower bound.
 
 			// If it has no children then we are also done.
 			if len(n.edges) == 0 {
@@ -130,11 +130,11 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			// Finally, this leaf is internal (has children) so we'll keep searching,
 			// but we need to add it to the iterator's stack since it has a leaf value
 			// that needs to be iterated over. It needs to be added to the stack
-			// before it's children below as it comes first.
+			// before its children below as it comes first.
 			ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
-			// We also need to mark it as expanded since we'll be adding any of it's
+			// We also need to mark it as expanded since we'll be adding any of its
 			// relevant children below and so don't want the iterator to re-add them
-			// on it's way back up the stack.
+			// on its way back up the stack.
 			ri.expandedParents[n] = struct{}{}
 		}
 
@@ -234,7 +234,7 @@ func (ri *ReverseIterator) Previous() ([]byte, interface{}, bool) {
 			return elem.leaf.key, elem.leaf.val, true
 		}
 
-		// it's not a leaf so keep walking the stack to find the previous leafq
+		// it's not a leaf so keep walking the stack to find the previous leaf
 	}
 	return nil, nil, false
 }

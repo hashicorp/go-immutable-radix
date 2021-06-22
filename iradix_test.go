@@ -1532,29 +1532,30 @@ func TestLenTxn(t *testing.T) {
 	}
 }
 
-// these should be defined in order
-var fixedLenKeys = []string{
-	"00000",
-	"00001",
-	"00004",
-	"00010",
-	"00020",
-	"20020",
-}
-
-// these should be defined in order
-var mixedLenKeys = []string{
-	"a1",
-	"abc",
-	"barbazboo",
-	"f",
-	"foo",
-	"found",
-	"zap",
-	"zip",
-}
-
 func TestIterateLowerBound(t *testing.T) {
+
+	// these should be defined in order
+	var fixedLenKeys = []string{
+		"00000",
+		"00001",
+		"00004",
+		"00010",
+		"00020",
+		"20020",
+	}
+
+	// these should be defined in order
+	var mixedLenKeys = []string{
+		"a1",
+		"abc",
+		"barbazboo",
+		"f",
+		"foo",
+		"found",
+		"zap",
+		"zip",
+	}
+
 	type exp struct {
 		keys   []string
 		search string

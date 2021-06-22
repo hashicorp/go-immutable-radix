@@ -68,13 +68,26 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 
 func TestReverseIterator_SeekLowerBound(t *testing.T) {
 
-	var revFixedLenKeys, revMixedLenKeys []string
-
-	for i := len(fixedLenKeys) - 1; i >= 0; i-- {
-		revFixedLenKeys = append(revFixedLenKeys, fixedLenKeys[i])
+	// these should be defined in order
+	var fixedLenKeys = []string{
+		"20020",
+		"00020",
+		"00010",
+		"00004",
+		"00001",
+		"00000",
 	}
-	for i := len(mixedLenKeys) - 1; i >= 0; i-- {
-		revMixedLenKeys = append(revMixedLenKeys, mixedLenKeys[i])
+
+	// these should be defined in order
+	var mixedLenKeys = []string{
+		"zip",
+		"zap",
+		"found",
+		"foo",
+		"f",
+		"barbazboo",
+		"abc",
+		"a1",
 	}
 
 	type exp struct {
@@ -86,7 +99,7 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 		{
 			fixedLenKeys,
 			"20020",
-			revFixedLenKeys,
+			fixedLenKeys,
 		},
 		{
 			fixedLenKeys,
@@ -124,12 +137,12 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 		{
 			mixedLenKeys,
 			"{", // after all lower case letters
-			revMixedLenKeys,
+			mixedLenKeys,
 		},
 		{
 			mixedLenKeys,
 			"zip",
-			revMixedLenKeys,
+			mixedLenKeys,
 		},
 		{
 			mixedLenKeys,
