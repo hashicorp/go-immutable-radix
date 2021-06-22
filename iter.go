@@ -80,13 +80,21 @@ func (i *Iterator) recurseMin(n *Node) *Node {
 func (i *Iterator) SeekLowerBound(key []byte) {
 	// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
 	// go because we need only a subset of edges of many nodes in the path to the
-	// leaf with the lower bound.
+	// leaf with the lower bound. Note that the iterator will still recurse into
+	// children that we don't traverse on the way to the reverse lower bound as it
+	// walks the stack.
 	i.stack = []edges{}
+	// i.node starts off in the common case as pointing to the root node of the
+	// tree. By the time we return we have either found a lower bound and setup
+	// the stack to traverse all larger keys, or we have not and the stack and
+	// node should both be nil to prevent the iterator from assuming it is just
+	// iterating the whole tree from the root node. Either way this needs to end
+	// up as nil so just set it here.
 	n := i.node
+	i.node = nil
 	search := key
 
 	found := func(n *Node) {
-		i.node = n
 		i.stack = append(i.stack, edges{edge{node: n}})
 	}
 
@@ -96,8 +104,6 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			found(n)
 			return
 		}
-		i.node = nil
-		return
 	}
 
 	for {
@@ -148,7 +154,6 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 		// Otherwise, take the lower bound next edge.
 		idx, lbNode := n.getLowerBoundEdge(search[0])
 		if lbNode == nil {
-			i.node = nil
 			return
 		}
 
@@ -157,7 +162,6 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			i.stack = append(i.stack, n.edges[idx+1:])
 		}
 
-		i.node = lbNode
 		// Recurse
 		n = lbNode
 	}

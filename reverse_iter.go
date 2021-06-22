@@ -45,9 +45,18 @@ func (ri *ReverseIterator) SeekPrefix(prefix []byte) {
 func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 	// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
 	// go because we need only a subset of edges of many nodes in the path to the
-	// leaf with the lower bound.
+	// leaf with the lower bound. Note that the iterator will still recurse into
+	// children that we don't traverse on the way to the reverse lower bound as it
+	// walks the stack.
 	ri.i.stack = []edges{}
+	// ri.i.node starts off in the common case as pointing to the root node of the
+	// tree. By the time we return we have either found a lower bound and setup
+	// the stack to traverse all larger keys, or we have not and the stack and
+	// node should both be nil to prevent the iterator from assuming it is just
+	// iterating the whole tree from the root node. Either way this needs to end
+	// up as nil so just set it here.
 	n := ri.i.node
+	ri.i.node = nil
 	search := key
 
 	if ri.expandedParents == nil {
@@ -55,7 +64,6 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 	}
 
 	found := func(n *Node) {
-		ri.i.node = n
 		ri.i.stack = append(ri.i.stack, edges{edge{node: n}})
 		// We need to mark this node as expanded in advance too otherwise the
 		// iterator will attempt to walk all of it's children even though they are
@@ -94,7 +102,6 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			// also exhausted the search key. Either way, that means there is no
 			// reverse lower bound since nothing comes before our current search
 			// prefix.
-			ri.i.node = nil
 			return
 		}
 
@@ -143,7 +150,6 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 			// the whole radix tree by following a different path somewhere further
 			// up. If that's the case then the iterator's stack will contain all the
 			// smaller nodes already and Previous will walk through them correctly.
-			ri.i.node = nil
 			return
 		}
 
@@ -167,11 +173,9 @@ func (ri *ReverseIterator) SeekReverseLowerBound(key []byte) {
 		// Exit if there's no lower bound edge. The stack will have the previous
 		// nodes already.
 		if lbNode == nil {
-			ri.i.node = nil
 			return
 		}
 
-		ri.i.node = lbNode
 		// Recurse
 		n = lbNode
 	}
