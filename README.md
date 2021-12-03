@@ -54,10 +54,10 @@ r, _, _ = r.Insert([]byte("100"), 10)
 it := r.Root().Iterator()
 it.SeekLowerBound([]byte("003"))
 for key, _, ok := it.Next(); ok; key, _, ok = it.Next() {
-  if key >= "050" {
+    if string(key) >= "050" {
       break
   }
-  fmt.Println(key)
+    fmt.Println(string(key))
 }
 // Output:
 //  005
