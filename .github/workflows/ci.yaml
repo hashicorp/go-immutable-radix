@@ -1,0 +1,26 @@
+name: Run CI Tests
+on: [push]
+env:
+  GO_VERSION: 1.18.4
+jobs:
+  run-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{env.GO_VERSION}}
+      - name: Run Go Vet
+        run: |
+          go vet ./...
+      - name: Run Go Fmt
+        run: |
+          files=$(go fmt ./...)
+          if [ -n "$files" ]; then
+            echo "Please run gofmt on these files ..."
+            echo "$files"
+            exit 1
+          fi
+      - name: Run Go Test
+        run: |
+          go test -race -v ./...
