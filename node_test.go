@@ -5,7 +5,7 @@ import (
 )
 
 func TestNodeWalk(t *testing.T) {
-	r := New()
+	r := New[any]()
 	keys := []string{"001", "002", "005", "010", "100"}
 	for _, k := range keys {
 		r, _, _ = r.Insert([]byte(k), nil)
@@ -13,7 +13,7 @@ func TestNodeWalk(t *testing.T) {
 
 	i := 0
 
-	r.Root().Walk(func(k []byte, _ interface{}) bool {
+	r.Root().Walk(func(k []byte, _ any) bool {
 		got := string(k)
 		want := keys[i]
 		if got != want {
@@ -30,7 +30,7 @@ func TestNodeWalk(t *testing.T) {
 }
 
 func TestNodeWalkBackwards(t *testing.T) {
-	r := New()
+	r := New[any]()
 	keys := []string{"001", "002", "005", "010", "100"}
 	for _, k := range keys {
 		r, _, _ = r.Insert([]byte(k), nil)
@@ -38,7 +38,7 @@ func TestNodeWalkBackwards(t *testing.T) {
 
 	i := len(keys) - 1
 
-	r.Root().WalkBackwards(func(k []byte, _ interface{}) bool {
+	r.Root().WalkBackwards(func(k []byte, _ any) bool {
 		got := string(k)
 		want := keys[i]
 		if got != want {
