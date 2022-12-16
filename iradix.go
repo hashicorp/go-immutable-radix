@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/hashicorp/golang-lru/simplelru"
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 )
 
 const (
@@ -63,7 +63,7 @@ type Txn[T any] struct {
 	// nodes for further writes and avoid unnecessary copies of nodes that
 	// have never been exposed outside the transaction. This will only hold
 	// up to defaultModifiedCache number of entries.
-	writable *simplelru.LRU
+	writable *simplelru.LRU[*Node[T], any]
 
 	// trackChannels is used to hold channels that need to be notified to
 	// signal mutation of the tree. This will only hold up to
@@ -146,7 +146,7 @@ func (t *Txn[T]) trackChannel(ch chan struct{}) {
 func (t *Txn[T]) writeNode(n *Node[T], forLeafUpdate bool) *Node[T] {
 	// Ensure the writable set exists.
 	if t.writable == nil {
-		lru, err := simplelru.NewLRU(defaultModifiedCache, nil)
+		lru, err := simplelru.NewLRU[*Node[T], any](defaultModifiedCache, nil)
 		if err != nil {
 			panic(err)
 		}
