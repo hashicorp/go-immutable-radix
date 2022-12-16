@@ -2,15 +2,16 @@ package iradix
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
+
+	"golang.org/x/exp/slices"
 )
 
 func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
-	r := New()
-	set := []string{}
+	r := New[any]()
+	var set []string
 
 	// This specifies a property where each call adds a new random key to the radix
 	// tree.
@@ -24,7 +25,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 
 		// Now iterate the tree from searchKey to the beginning
 		it := r.Root().ReverseIterator()
-		result := []string{}
+		var result []string
 		it.SeekReverseLowerBound([]byte(searchKey))
 		for {
 			key, _, ok := it.Previous()
@@ -44,7 +45,7 @@ func TestReverseIterator_SeekReverseLowerBoundFuzz(t *testing.T) {
 		t.Logf("Current Set: %#v", set)
 		t.Logf("Search Key: %#v %v", searchKey, "" >= string(searchKey))
 
-		result := []string{}
+		var result []string
 		for i := len(set) - 1; i >= 0; i-- {
 			k := set[i]
 			// Check this is not a duplicate of the previous value we just included.
@@ -238,7 +239,7 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 
 	for idx, test := range cases {
 		t.Run(fmt.Sprintf("case%03d", idx), func(t *testing.T) {
-			r := New()
+			r := New[any]()
 
 			// Insert keys
 			for _, k := range test.keys {
@@ -257,7 +258,7 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 			iter.SeekReverseLowerBound([]byte(test.search))
 
 			// Consume all the keys
-			out := []string{}
+			var out []string
 			for {
 				key, _, ok := iter.Previous()
 				if !ok {
@@ -265,7 +266,7 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 				}
 				out = append(out, string(key))
 			}
-			if !reflect.DeepEqual(out, test.want) {
+			if !slices.Equal(test.want, out) {
 				t.Fatalf("mis-match: key=%s\n  got=%v\n  want=%v", test.search,
 					out, test.want)
 			}
@@ -274,7 +275,7 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 }
 
 func TestReverseIterator_SeekPrefix(t *testing.T) {
-	r := New()
+	r := New[any]()
 	keys := []string{"001", "002", "005", "010", "100"}
 	for _, k := range keys {
 		r, _, _ = r.Insert([]byte(k), nil)
@@ -319,7 +320,7 @@ func TestReverseIterator_SeekPrefixWatch(t *testing.T) {
 	key := []byte("key")
 
 	// Create tree
-	r := New()
+	r := New[any]()
 	r, _, _ = r.Insert(key, nil)
 
 	// Find mutate channel
@@ -341,7 +342,7 @@ func TestReverseIterator_SeekPrefixWatch(t *testing.T) {
 }
 
 func TestReverseIterator_Previous(t *testing.T) {
-	r := New()
+	r := New[any]()
 	keys := []string{"001", "002", "005", "010", "100"}
 	for _, k := range keys {
 		r, _, _ = r.Insert([]byte(k), nil)

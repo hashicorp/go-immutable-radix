@@ -2,20 +2,20 @@ package iradix
 
 import "sort"
 
-type edges []edge
+type edges[T any] []edge[T]
 
-func (e edges) Len() int {
+func (e edges[T]) Len() int {
 	return len(e)
 }
 
-func (e edges) Less(i, j int) bool {
+func (e edges[T]) Less(i, j int) bool {
 	return e[i].label < e[j].label
 }
 
-func (e edges) Swap(i, j int) {
+func (e edges[T]) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
-func (e edges) Sort() {
+func (e edges[T]) Sort() {
 	sort.Sort(e)
 }
