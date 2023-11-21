@@ -13,7 +13,7 @@ type PathIterator[T any] struct {
 
 // Next returns the next node in order
 func (i *PathIterator[T]) Next() ([]byte, T, bool) {
-	// This is mostly just an asyncrhonous implementation of the WalkPath
+	// This is mostly just an asynchronous implementation of the WalkPath
 	// method on the node.
 	var zero T
 	var leaf *leafNode[T]
