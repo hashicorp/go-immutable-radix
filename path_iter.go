@@ -3,7 +3,7 @@ package iradix
 import "bytes"
 
 // PathIterator is used to iterate over a set of nodes from the root
-// down to a specified path. This will iterate overthe same values that
+// down to a specified path. This will iterate over the same values that
 // the Node.WalkPath method will.
 type PathIterator[T any] struct {
 	node *Node[T]
