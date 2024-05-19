@@ -1870,3 +1870,48 @@ func TestClone(t *testing.T) {
 		t.Fatalf("bad baz in t2")
 	}
 }
+func setup() (int, []string) {
+	maxV := 100
+	keys := make([]string, maxV)
+	for i := 0; i < maxV; i++ {
+		uuid1, _ := uuid.GenerateUUID()
+		for j := 0; j < 10; j++ {
+			uuidx, _ := uuid.GenerateUUID()
+			uuid1 += uuidx
+		}
+		keys[i] = uuid1
+	}
+	return maxV, keys
+}
+
+func BenchmarkInsertIRadix(b *testing.B) {
+	r := New[int]()
+	maxV, keys := setup()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1 := keys[n%maxV]
+		r.Insert([]byte(uuid1), n)
+	}
+}
+
+func BenchmarkSearchIRadix(b *testing.B) {
+	r := New[int]()
+	maxV, keys := setup()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1 := keys[n%maxV]
+		r.Insert([]byte(uuid1), n)
+		r.Get([]byte(uuid1))
+	}
+}
+
+func BenchmarkDeleteIRadix(b *testing.B) {
+	r := New[int]()
+	maxV, keys := setup()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1 := keys[n%maxV]
+		r.Insert([]byte(uuid1), n)
+		r.Delete([]byte(uuid1))
+	}
+}
