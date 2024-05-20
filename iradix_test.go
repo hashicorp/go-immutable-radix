@@ -1884,29 +1884,6 @@ func generateDataset(size int) []string {
 	return dataset
 }
 
-func BenchmarkGroupedOperations(b *testing.B) {
-	dataset := generateDataset(datasetSize)
-	art := New[int]()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		// Insert
-		for _, key := range dataset {
-			art.Insert([]byte(key), i)
-		}
-
-		// Search
-		for _, key := range dataset {
-			art.Get([]byte(key))
-		}
-
-		// Delete
-		for _, key := range dataset {
-			art.Delete([]byte(key))
-		}
-	}
-}
-
 func BenchmarkMixedOperations(b *testing.B) {
 	dataset := generateDataset(datasetSize)
 	art := New[int]()
