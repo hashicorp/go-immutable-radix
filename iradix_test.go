@@ -3,6 +3,8 @@ package iradix
 import (
 	"bufio"
 	"fmt"
+	"github.com/hashicorp/go-uuid"
+	"golang.org/x/exp/slices"
 	"math/rand"
 	"os"
 	"reflect"
@@ -12,10 +14,6 @@ import (
 	"testing"
 	"testing/quick"
 	"time"
-	"unsafe"
-
-	"github.com/hashicorp/go-uuid"
-	"golang.org/x/exp/slices"
 )
 
 func CopyTree[T any](t *Tree[T]) *Tree[T] {
@@ -75,7 +73,6 @@ func BenchmarkTestARTree_InsertAndSearchWords(b *testing.B) {
 	for i := 1; i < b.N; i++ {
 		art, _, _ = art.Insert([]byte(lines[i%(len(lines))]), 0)
 	}
-	fmt.Println(unsafe.Sizeof(art))
 }
 func TestRadix_HugeTxn(t *testing.T) {
 	r := New[int]()
