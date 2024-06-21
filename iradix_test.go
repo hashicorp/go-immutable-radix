@@ -1960,6 +1960,19 @@ func BenchmarkInsertIRadix(b *testing.B) {
 	}
 }
 
+func BenchmarkSearchART(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		val, _ := r.Get([]byte(uuid1))
+		if val != n {
+			b.Fatalf("hello")
+		}
+	}
+}
+
 func BenchmarkDeleteIRadix(b *testing.B) {
 	r := New[int]()
 	b.ResetTimer()
@@ -2018,19 +2031,6 @@ func BenchmarkDeletePrefixART(b *testing.B) {
 		uuid1, _ := uuid.GenerateUUID()
 		r, _, _ = r.Insert([]byte(uuid1), n)
 		r, _ = r.DeletePrefix([]byte(""))
-	}
-}
-
-func BenchmarkSearchART(b *testing.B) {
-	r := New[int]()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		uuid1, _ := uuid.GenerateUUID()
-		r, _, _ = r.Insert([]byte(uuid1), n)
-		val, _ := r.Get([]byte(uuid1))
-		if val != n {
-			b.Fatalf("hello")
-		}
 	}
 }
 
