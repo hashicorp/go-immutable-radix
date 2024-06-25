@@ -2,8 +2,6 @@ package iradix
 
 import (
 	"bytes"
-	"strings"
-
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 )
 
@@ -31,9 +29,7 @@ type Tree[T any] struct {
 // New returns an empty Tree
 func New[T any]() *Tree[T] {
 	t := &Tree[T]{
-		root: &Node[T]{
-			mutateCh: make(chan struct{}),
-		},
+		root: &Node[T]{},
 	}
 	return t
 }
@@ -78,6 +74,8 @@ type Txn[T any] struct {
 
 // Txn starts a new transaction that can be used to mutate the tree
 func (t *Tree[T]) Txn() *Txn[T] {
+	t.root.lazyRefCount++
+	t.root.processLazyRefCount()
 	txn := &Txn[T]{
 		root: t.root,
 		snap: t.root,
@@ -93,7 +91,7 @@ func (t *Txn[T]) Clone() *Txn[T] {
 	t.writable = nil
 
 	txn := &Txn[T]{
-		root: t.root,
+		root: t.root.clone(),
 		snap: t.snap,
 		size: t.size,
 	}
@@ -111,24 +109,24 @@ func (t *Txn[T]) TrackMutate(track bool) {
 // overflow flag if we can no longer track any more. This limits the amount of
 // state that will accumulate during a transaction and we have a slower algorithm
 // to switch to if we overflow.
-func (t *Txn[T]) trackChannel(ch chan struct{}) {
+func (t *Txn[T]) trackChannel(node *Node[T]) {
 	// In overflow, make sure we don't store any more objects.
-	if t.trackOverflow {
-		return
-	}
+	//if t.trackOverflow {
+	//	return
+	//}
 
 	// If this would overflow the state we reject it and set the flag (since
 	// we aren't tracking everything that's required any longer).
-	if len(t.trackChannels) >= defaultModifiedCache {
-		// Mark that we are in the overflow state
-		t.trackOverflow = true
-
-		// Clear the map so that the channels can be garbage collected. It is
-		// safe to do this since we have already overflowed and will be using
-		// the slow notify algorithm.
-		t.trackChannels = nil
-		return
-	}
+	//if len(t.trackChannels) >= defaultModifiedCache {
+	//	// Mark that we are in the overflow state
+	//	t.trackOverflow = true
+	//
+	//	// Clear the map so that the channels can be garbage collected. It is
+	//	// safe to do this since we have already overflowed and will be using
+	//	// the slow notify algorithm.
+	//	t.trackChannels = nil
+	//	return
+	//}
 
 	// Create the map on the fly when we need it.
 	if t.trackChannels == nil {
@@ -136,7 +134,20 @@ func (t *Txn[T]) trackChannel(ch chan struct{}) {
 	}
 
 	// Otherwise we are good to track it.
-	t.trackChannels[ch] = struct{}{}
+	t.trackChannels[node.getMutateCh()] = struct{}{}
+	node.setMutateCh(nil)
+}
+
+func (t *Txn[T]) trackChannelLeaf(node *leafNode[T]) {
+	// In overflow, make sure we don't store any more objects.
+	// Create the map on the fly when we need it.
+	if t.trackChannels == nil {
+		t.trackChannels = make(map[chan struct{}]struct{})
+	}
+
+	// Otherwise we are good to track it.
+	t.trackChannels[node.getMutateCh()] = struct{}{}
+	node.setMutateCh(nil)
 }
 
 // writeNode returns a node to be modified, if the current node has already been
@@ -145,6 +156,8 @@ func (t *Txn[T]) trackChannel(ch chan struct{}) {
 // which will set leaf mutation tracking appropriately as well.
 func (t *Txn[T]) writeNode(n *Node[T], forLeafUpdate bool) *Node[T] {
 	// Ensure the writable set exists.
+	n.processLazyRefCount()
+
 	if t.writable == nil {
 		lru, err := simplelru.NewLRU[*Node[T], any](defaultModifiedCache, nil)
 		if err != nil {
@@ -160,19 +173,23 @@ func (t *Txn[T]) writeNode(n *Node[T], forLeafUpdate bool) *Node[T] {
 	// update the leaf.
 	if _, ok := t.writable.Get(n); ok {
 		if t.trackMutate && forLeafUpdate && n.leaf != nil {
-			t.trackChannel(n.leaf.mutateCh)
+			t.trackChannelLeaf(n.leaf)
 		}
 		return n
 	}
 
 	// Mark this node as being mutated.
 	if t.trackMutate {
-		t.trackChannel(n.mutateCh)
+		t.trackChannel(n)
 	}
 
 	// Mark its leaf as being mutated, if appropriate.
 	if t.trackMutate && forLeafUpdate && n.leaf != nil {
-		t.trackChannel(n.leaf.mutateCh)
+		t.trackChannelLeaf(n.leaf)
+	}
+
+	if n.refCount <= 1 {
+		return n
 	}
 
 	// Copy the existing node. If you have set forLeafUpdate it will be
@@ -180,8 +197,9 @@ func (t *Txn[T]) writeNode(n *Node[T], forLeafUpdate bool) *Node[T] {
 	// writing. You MUST replace it, because the channel associated with
 	// this leaf will be closed when this transaction is committed.
 	nc := &Node[T]{
-		mutateCh: make(chan struct{}),
-		leaf:     n.leaf,
+		leaf:         n.leaf,
+		refCount:     n.refCount,
+		lazyRefCount: n.lazyRefCount,
 	}
 	if n.prefix != nil {
 		nc.prefix = make([]byte, len(n.prefix))
@@ -207,12 +225,12 @@ func (t *Txn[T]) trackChannelsAndCount(n *Node[T]) int {
 	}
 	// Mark this node as being mutated.
 	if t.trackMutate {
-		t.trackChannel(n.mutateCh)
+		t.trackChannel(n)
 	}
 
 	// Mark its leaf as being mutated, if appropriate.
 	if t.trackMutate && n.leaf != nil {
-		t.trackChannel(n.leaf.mutateCh)
+		t.trackChannelLeaf(n.leaf)
 	}
 
 	// Recurse on the children
@@ -228,10 +246,12 @@ func (t *Txn[T]) mergeChild(n *Node[T]) {
 	// Mark the child node as being mutated since we are about to abandon
 	// it. We don't need to mark the leaf since we are retaining it if it
 	// is there.
+	n.processLazyRefCount()
 	e := n.edges[0]
 	child := e.node
+	child.processLazyRefCount()
 	if t.trackMutate {
-		t.trackChannel(child.mutateCh)
+		t.trackChannel(child)
 	}
 
 	// Merge the nodes.
@@ -249,6 +269,8 @@ func (t *Txn[T]) mergeChild(n *Node[T]) {
 func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 	var zero T
 
+	n.processLazyRefCount()
+
 	// Handle key exhaustion
 	if len(search) == 0 {
 		var oldVal T
@@ -260,9 +282,9 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 
 		nc := t.writeNode(n, true)
 		nc.leaf = &leafNode[T]{
-			mutateCh: make(chan struct{}),
 			key:      k,
 			val:      v,
+			refCount: 1,
 		}
 		return nc, oldVal, didUpdate
 	}
@@ -275,13 +297,13 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 		e := edge[T]{
 			label: search[0],
 			node: &Node[T]{
-				mutateCh: make(chan struct{}),
 				leaf: &leafNode[T]{
-					mutateCh: make(chan struct{}),
 					key:      k,
 					val:      v,
+					refCount: 1,
 				},
-				prefix: search,
+				refCount: 1,
+				prefix:   search,
 			},
 		}
 		nc := t.writeNode(n, false)
@@ -305,8 +327,8 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 	// Split the node
 	nc := t.writeNode(n, false)
 	splitNode := &Node[T]{
-		mutateCh: make(chan struct{}),
 		prefix:   search[:commonPrefix],
+		refCount: 1,
 	}
 	nc.replaceEdge(edge[T]{
 		label: search[0],
@@ -323,9 +345,9 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 
 	// Create a new leaf node
 	leaf := &leafNode[T]{
-		mutateCh: make(chan struct{}),
 		key:      k,
 		val:      v,
+		refCount: 1,
 	}
 
 	// If the new key is a subset, add to to this node
@@ -339,9 +361,9 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 	splitNode.addEdge(edge[T]{
 		label: search[0],
 		node: &Node[T]{
-			mutateCh: make(chan struct{}),
 			leaf:     leaf,
 			prefix:   search,
+			refCount: 1,
 		},
 	})
 	return nc, zero, false
@@ -349,6 +371,7 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 
 // delete does a recursive deletion
 func (t *Txn[T]) delete(n *Node[T], search []byte) (*Node[T], *leafNode[T]) {
+	n.processLazyRefCount()
 	// Check for key exhaustion
 	if len(search) == 0 {
 		if !n.isLeaf() {
@@ -365,7 +388,7 @@ func (t *Txn[T]) delete(n *Node[T], search []byte) (*Node[T], *leafNode[T]) {
 		nc.leaf = nil
 
 		// Check if this node should be merged
-		if n != t.root && len(nc.edges) == 1 {
+		if n != t.root && len(nc.edges) == 1 && n != nc {
 			t.mergeChild(nc)
 		}
 		return nc, oldLeaf
@@ -394,7 +417,7 @@ func (t *Txn[T]) delete(n *Node[T], search []byte) (*Node[T], *leafNode[T]) {
 	// Delete the edge if the node has no edges
 	if newChild.leaf == nil && len(newChild.edges) == 0 {
 		nc.delEdge(label)
-		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() {
+		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() && n != nc {
 			t.mergeChild(nc)
 		}
 	} else {
@@ -408,11 +431,12 @@ func (t *Txn[T]) deletePrefix(n *Node[T], search []byte) (*Node[T], int) {
 	// Check for key exhaustion
 	if len(search) == 0 {
 		nc := t.writeNode(n, true)
+		numDel := t.trackChannelsAndCount(n)
 		if n.isLeaf() {
 			nc.leaf = nil
 		}
 		nc.edges = nil
-		return nc, t.trackChannelsAndCount(n)
+		return nc, numDel
 	}
 
 	// Look for an edge
@@ -526,6 +550,8 @@ func (t *Txn[T]) Commit() *Tree[T] {
 // CommitOnly is used to finalize the transaction and return a new tree, but
 // does not issue any notifications until Notify is called.
 func (t *Txn[T]) CommitOnly() *Tree[T] {
+	t.root.lazyRefCount--
+	t.root.processLazyRefCount()
 	nt := &Tree[T]{t.root, t.size}
 	t.writable = nil
 	return nt
@@ -535,63 +561,64 @@ func (t *Txn[T]) CommitOnly() *Tree[T] {
 // to trigger notifications. This doesn't require any additional state but it
 // is very expensive to compute.
 func (t *Txn[T]) slowNotify() {
-	snapIter := t.snap.rawIterator()
-	rootIter := t.root.rawIterator()
-	for snapIter.Front() != nil || rootIter.Front() != nil {
-		// If we've exhausted the nodes in the old snapshot, we know
-		// there's nothing remaining to notify.
-		if snapIter.Front() == nil {
-			return
-		}
-		snapElem := snapIter.Front()
-
-		// If we've exhausted the nodes in the new root, we know we need
-		// to invalidate everything that remains in the old snapshot. We
-		// know from the loop condition there's something in the old
-		// snapshot.
-		if rootIter.Front() == nil {
-			close(snapElem.mutateCh)
-			if snapElem.isLeaf() {
-				close(snapElem.leaf.mutateCh)
-			}
-			snapIter.Next()
-			continue
-		}
-
-		// Do one string compare so we can check the various conditions
-		// below without repeating the compare.
-		cmp := strings.Compare(snapIter.Path(), rootIter.Path())
-
-		// If the snapshot is behind the root, then we must have deleted
-		// this node during the transaction.
-		if cmp < 0 {
-			close(snapElem.mutateCh)
-			if snapElem.isLeaf() {
-				close(snapElem.leaf.mutateCh)
-			}
-			snapIter.Next()
-			continue
-		}
-
-		// If the snapshot is ahead of the root, then we must have added
-		// this node during the transaction.
-		if cmp > 0 {
-			rootIter.Next()
-			continue
-		}
-
-		// If we have the same path, then we need to see if we mutated a
-		// node and possibly the leaf.
-		rootElem := rootIter.Front()
-		if snapElem != rootElem {
-			close(snapElem.mutateCh)
-			if snapElem.leaf != nil && (snapElem.leaf != rootElem.leaf) {
-				close(snapElem.leaf.mutateCh)
-			}
-		}
-		snapIter.Next()
-		rootIter.Next()
-	}
+	t.Notify()
+	//snapIter := t.snap.rawIterator()
+	//rootIter := t.root.rawIterator()
+	//for snapIter.Front() != nil || rootIter.Front() != nil {
+	//	// If we've exhausted the nodes in the old snapshot, we know
+	//	// there's nothing remaining to notify.
+	//	if snapIter.Front() == nil {
+	//		return
+	//	}
+	//	snapElem := snapIter.Front()
+	//
+	//	// If we've exhausted the nodes in the new root, we know we need
+	//	// to invalidate everything that remains in the old snapshot. We
+	//	// know from the loop condition there's something in the old
+	//	// snapshot.
+	//	if rootIter.Front() == nil {
+	//		close(snapElem.getMutateCh())
+	//		if snapElem.isLeaf() {
+	//			close(snapElem.leaf.getMutateCh())
+	//		}
+	//		snapIter.Next()
+	//		continue
+	//	}
+	//
+	//	// Do one string compare so we can check the various conditions
+	//	// below without repeating the compare.
+	//	cmp := strings.Compare(snapIter.Path(), rootIter.Path())
+	//
+	//	// If the snapshot is behind the root, then we must have deleted
+	//	// this node during the transaction.
+	//	if cmp < 0 {
+	//		close(snapElem.getMutateCh())
+	//		if snapElem.isLeaf() {
+	//			close(snapElem.leaf.getMutateCh())
+	//		}
+	//		snapIter.Next()
+	//		continue
+	//	}
+	//
+	//	// If the snapshot is ahead of the root, then we must have added
+	//	// this node during the transaction.
+	//	if cmp > 0 {
+	//		rootIter.Next()
+	//		continue
+	//	}
+	//
+	//	// If we have the same path, then we need to see if we mutated a
+	//	// node and possibly the leaf.
+	//	rootElem := rootIter.Front()
+	//	if snapElem != rootElem {
+	//		close(snapElem.getMutateCh())
+	//		if snapElem.leaf != nil && (snapElem.leaf != rootElem.leaf) {
+	//			close(snapElem.leaf.getMutateCh())
+	//		}
+	//	}
+	//	snapIter.Next()
+	//	rootIter.Next()
+	//}
 }
 
 // Notify is used along with TrackMutate to trigger notifications. This must
@@ -604,12 +631,12 @@ func (t *Txn[T]) Notify() {
 
 	// If we've overflowed the tracking state we can't use it in any way and
 	// need to do a full tree compare.
-	if t.trackOverflow {
-		t.slowNotify()
-	} else {
-		for ch := range t.trackChannels {
-			close(ch)
-		}
+	//if t.trackOverflow {
+	//	t.slowNotify()
+	//} else {
+	for ch := range t.trackChannels {
+		close(ch)
+		//}
 	}
 
 	// Clean up the tracking state so that a re-notify is safe (will trigger

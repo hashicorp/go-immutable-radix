@@ -17,7 +17,7 @@ func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	// Wipe the stack
 	i.stack = nil
 	n := i.node
-	watch = n.mutateCh
+	watch = n.getMutateCh()
 	search := prefix
 	for {
 		// Check for key exhaustion
@@ -34,7 +34,7 @@ func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 		}
 
 		// Update to the finest granularity as the search makes progress
-		watch = n.mutateCh
+		watch = n.getMutateCh()
 
 		// Consume the search prefix
 		if bytes.HasPrefix(search, n.prefix) {

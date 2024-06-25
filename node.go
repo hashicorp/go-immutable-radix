@@ -3,6 +3,7 @@ package iradix
 import (
 	"bytes"
 	"sort"
+	"sync/atomic"
 )
 
 // WalkFn is used when walking the tree. Takes a
@@ -12,9 +13,10 @@ type WalkFn[T any] func(k []byte, v T) bool
 
 // leafNode is used to represent a value
 type leafNode[T any] struct {
-	mutateCh chan struct{}
+	mutateCh atomic.Pointer[chan struct{}]
 	key      []byte
 	val      T
+	refCount int64
 }
 
 // edge is used to represent an edge node
@@ -25,8 +27,11 @@ type edge[T any] struct {
 
 // Node is an immutable node in the radix tree
 type Node[T any] struct {
+	refCount     int64
+	lazyRefCount int64
+
 	// mutateCh is closed if this node is modified
-	mutateCh chan struct{}
+	mutateCh atomic.Pointer[chan struct{}]
 
 	// leaf is used to store possible leaf
 	leaf *leafNode[T]
@@ -105,12 +110,12 @@ func (n *Node[T]) delEdge(label byte) {
 
 func (n *Node[T]) GetWatch(k []byte) (<-chan struct{}, T, bool) {
 	search := k
-	watch := n.mutateCh
+	watch := n.getMutateCh()
 	for {
 		// Check for key exhaustion
 		if len(search) == 0 {
 			if n.isLeaf() {
-				return n.leaf.mutateCh, n.leaf.val, true
+				return n.leaf.getMutateCh(), n.leaf.val, true
 			}
 			break
 		}
@@ -122,7 +127,7 @@ func (n *Node[T]) GetWatch(k []byte) (<-chan struct{}, T, bool) {
 		}
 
 		// Update to the finest granularity as the search makes progress
-		watch = n.mutateCh
+		watch = n.getMutateCh()
 
 		// Consume the search prefix
 		if bytes.HasPrefix(search, n.prefix) {
@@ -323,4 +328,81 @@ func reverseRecursiveWalk[T any](n *Node[T], fn WalkFn[T]) bool {
 		}
 	}
 	return false
+}
+
+func (n *Node[T]) processLazyRefCount() {
+	n.refCount += n.lazyRefCount
+	if n.leaf != nil {
+		n.leaf.refCount += n.lazyRefCount
+	}
+	for _, ed := range n.edges {
+		ed.node.lazyRefCount += n.lazyRefCount
+	}
+	n.lazyRefCount = 0
+}
+
+func (n *Node[T]) clone() *Node[T] {
+	nn := new(Node[T])
+	nn.refCount = n.refCount
+	nn.lazyRefCount = n.lazyRefCount
+	if n.getMutateCh() != nil {
+		nn.setMutateCh(n.getMutateCh())
+	}
+	if n.prefix != nil {
+		nn.prefix = make([]byte, len(n.prefix))
+		copy(nn.prefix, n.prefix)
+	}
+	if n.leaf != nil {
+		nn.leaf = n.leaf
+	}
+	if len(n.edges) != 0 {
+		nn.edges = make([]edge[T], len(n.edges))
+		for idx, ed := range n.edges {
+			nn.edges[idx].label = ed.label
+			nn.edges[idx].node = ed.node
+		}
+	}
+	return nn
+}
+
+func (n *Node[T]) getMutateCh() chan struct{} {
+	ch := n.mutateCh.Load()
+	if ch != nil && *ch != nil {
+		return *ch
+	}
+
+	// No chan yet, create one
+	newCh := make(chan struct{})
+
+	swapped := n.mutateCh.CompareAndSwap(ch, &newCh)
+	if swapped {
+		return newCh
+	}
+	// We raced with another reader and they won so return the chan they created instead.
+	return *n.mutateCh.Load()
+}
+
+func (n *Node[T]) setMutateCh(ch chan struct{}) {
+	n.mutateCh.Store(&ch)
+}
+
+func (n *leafNode[T]) getMutateCh() chan struct{} {
+	ch := n.mutateCh.Load()
+	if ch != nil && *ch != nil {
+		return *ch
+	}
+
+	// No chan yet, create one
+	newCh := make(chan struct{})
+
+	swapped := n.mutateCh.CompareAndSwap(ch, &newCh)
+	if swapped {
+		return newCh
+	}
+	// We raced with another reader and they won so return the chan they created instead.
+	return *n.mutateCh.Load()
+}
+
+func (n *leafNode[T]) setMutateCh(ch chan struct{}) {
+	n.mutateCh.Store(&ch)
 }
