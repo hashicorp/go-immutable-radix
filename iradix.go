@@ -34,6 +34,13 @@ func New[T any]() *Tree[T] {
 	return t
 }
 
+func (t *Tree[T]) Clone() *Tree[T] {
+	nt := &Tree[T]{}
+	nt.root = t.root.clone(true)
+	nt.size = t.size
+	return nt
+}
+
 // Len is used to return the number of elements in the tree
 func (t *Tree[T]) Len() int {
 	return t.size
@@ -73,11 +80,11 @@ type Txn[T any] struct {
 }
 
 // Txn starts a new transaction that can be used to mutate the tree
-func (t *Tree[T]) Txn() *Txn[T] {
+func (t *Tree[T]) Txn(clone bool) *Txn[T] {
 	t.root.lazyRefCount++
 	t.root.processLazyRefCount()
 	txn := &Txn[T]{
-		root: t.root,
+		root: t.root.clone(clone),
 		snap: t.root,
 		size: t.size,
 	}
@@ -89,9 +96,8 @@ func (t *Tree[T]) Txn() *Txn[T] {
 func (t *Txn[T]) Clone() *Txn[T] {
 	// reset the writable node cache to avoid leaking future writes into the clone
 	t.writable = nil
-
 	txn := &Txn[T]{
-		root: t.root.clone(),
+		root: t.root.clone(true),
 		snap: t.snap,
 		size: t.size,
 	}
@@ -552,7 +558,7 @@ func (t *Txn[T]) Commit() *Tree[T] {
 func (t *Txn[T]) CommitOnly() *Tree[T] {
 	t.root.lazyRefCount--
 	t.root.processLazyRefCount()
-	nt := &Tree[T]{t.root, t.size}
+	nt := &Tree[T]{t.root.clone(false), t.size}
 	t.writable = nil
 	return nt
 }
@@ -648,7 +654,7 @@ func (t *Txn[T]) Notify() {
 // Insert is used to add or update a given key. The return provides
 // the new tree, previous value and a bool indicating if any was set.
 func (t *Tree[T]) Insert(k []byte, v T) (*Tree[T], T, bool) {
-	txn := t.Txn()
+	txn := t.Txn(false)
 	old, ok := txn.Insert(k, v)
 	return txn.Commit(), old, ok
 }
@@ -656,7 +662,7 @@ func (t *Tree[T]) Insert(k []byte, v T) (*Tree[T], T, bool) {
 // Delete is used to delete a given key. Returns the new tree,
 // old value if any, and a bool indicating if the key was set.
 func (t *Tree[T]) Delete(k []byte) (*Tree[T], T, bool) {
-	txn := t.Txn()
+	txn := t.Txn(false)
 	old, ok := txn.Delete(k)
 	return txn.Commit(), old, ok
 }
@@ -664,7 +670,7 @@ func (t *Tree[T]) Delete(k []byte) (*Tree[T], T, bool) {
 // DeletePrefix is used to delete all nodes starting with a given prefix. Returns the new tree,
 // and a bool indicating if the prefix matched any nodes
 func (t *Tree[T]) DeletePrefix(k []byte) (*Tree[T], bool) {
-	txn := t.Txn()
+	txn := t.Txn(false)
 	ok := txn.DeletePrefix(k)
 	return txn.Commit(), ok
 }

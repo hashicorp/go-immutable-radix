@@ -80,7 +80,7 @@ func TestRadix_HugeTxn(t *testing.T) {
 	r := New[int]()
 
 	// Insert way more nodes than the cache can fit
-	txn1 := r.Txn()
+	txn1 := r.Txn(true)
 	var expect []string
 	for i := 0; i < defaultModifiedCache*100; i++ {
 		gen, err := uuid.GenerateUUID()
@@ -212,7 +212,7 @@ func TestRoot(t *testing.T) {
 
 func TestInsert_UpdateFeedback(t *testing.T) {
 	r := New[any]()
-	txn1 := r.Txn()
+	txn1 := r.Txn(true)
 
 	for i := 0; i < 10; i++ {
 		var old interface{}
@@ -404,7 +404,7 @@ func TestTrackMutate_DeletePrefix(t *testing.T) {
 	}
 
 	// Verify that deleting prefixes triggers the right set of watches
-	txn := r.Txn()
+	txn := r.Txn(true)
 	txn.TrackMutate(true)
 	ok := txn.DeletePrefix([]byte("foo"))
 	if !ok {
@@ -789,8 +789,8 @@ func TestMergeChildVisibility(t *testing.T) {
 	r, _, _ = r.Insert([]byte("foobaz"), 43)
 	r, _, _ = r.Insert([]byte("foozip"), 10)
 
-	txn1 := r.Txn()
-	txn2 := r.Txn()
+	txn1 := r.Txn(true)
+	txn2 := r.Txn(true)
 
 	// Ensure we get the expected value foobar and foobaz
 	if val, ok := txn1.Get([]byte("foobar")); !ok || val != 42 {
@@ -911,7 +911,7 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 		otherWatch := iter.SeekPrefixWatch([]byte("foo/b"))
 
 		// Write to a sub-child should trigger the leaf!
-		txn := r.Txn()
+		txn := r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Insert([]byte("foobarbaz"), nil)
 		switch i {
@@ -968,7 +968,7 @@ func TestTrackMutate_SeekPrefixWatch(t *testing.T) {
 		missingWatch = iter.SeekPrefixWatch([]byte("foobarbaz"))
 
 		// Delete to a sub-child should trigger the leaf!
-		txn = r.Txn()
+		txn = r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Delete([]byte("foobarbaz"))
 		switch i {
@@ -1056,7 +1056,7 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Write to a sub-child should not trigger the leaf!
-		txn := r.Txn()
+		txn := r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Insert([]byte("foobarbaz"), nil)
 		switch i {
@@ -1107,7 +1107,7 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Write to a exactly leaf should trigger the leaf!
-		txn = r.Txn()
+		txn = r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Insert([]byte("foobar"), nil)
 		switch i {
@@ -1165,7 +1165,7 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Delete to a sub-child should not trigger the leaf!
-		txn = r.Txn()
+		txn = r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Delete([]byte("foobarbaz"))
 		switch i {
@@ -1216,7 +1216,7 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Write to a exactly leaf should trigger the leaf!
-		txn = r.Txn()
+		txn = r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Delete([]byte("foobar"))
 		switch i {
@@ -1319,7 +1319,7 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 	}
 
 	// Start the transaction.
-	txn := r.Txn()
+	txn := r.Txn(true)
 	txn.TrackMutate(true)
 
 	// Add new nodes on both sides of the tree and delete enough nodes to
@@ -1412,7 +1412,7 @@ func TestTrackMutate_mergeChild(t *testing.T) {
 		// would detect copied but otherwise identical leaves as changed
 		// and wrongly close channels. The normal path would fail to
 		// notify on a child node that had been merged.
-		txn := r.Txn()
+		txn := r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Delete([]byte("acb"))
 		switch i {
@@ -1480,7 +1480,7 @@ func TestTrackMutate_cachedNodeChange(t *testing.T) {
 		r, _, _ = r.Insert([]byte("acb"), nil)
 		snapIter := r.root.rawIterator()
 
-		txn := r.Txn()
+		txn := r.Txn(true)
 		txn.TrackMutate(true)
 		txn.Delete([]byte("acb"))
 		txn.Insert([]byte("aca"), nil)
@@ -1534,7 +1534,7 @@ func TestLenTxn(t *testing.T) {
 		t.Fatalf("not starting with empty tree")
 	}
 
-	txn := r.Txn()
+	txn := r.Txn(true)
 	keys := []string{
 		"foo/bar/baz",
 		"foo/baz/bar",
@@ -1551,7 +1551,7 @@ func TestLenTxn(t *testing.T) {
 		t.Fatalf("bad: expected %d, got %d", len(keys), r.Len())
 	}
 
-	txn = r.Txn()
+	txn = r.Txn(true)
 	for _, k := range keys {
 		txn.Delete([]byte(k))
 	}
@@ -1873,7 +1873,7 @@ func TestIterateLowerBoundFuzz(t *testing.T) {
 func TestClone(t *testing.T) {
 	r := New[int]()
 
-	t1 := r.Txn()
+	t1 := r.Txn(true)
 	t1.Insert([]byte("foo"), 7)
 	t2 := t1.Clone()
 
@@ -2001,7 +2001,7 @@ func BenchmarkDeleteIRadix(b *testing.B) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	txnTree := art.Txn()
+	txnTree := art.Txn(true)
 
 	// Function to perform a transaction with multiple inserts and deletes
 	txn := func() {

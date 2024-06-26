@@ -331,6 +331,9 @@ func reverseRecursiveWalk[T any](n *Node[T], fn WalkFn[T]) bool {
 }
 
 func (n *Node[T]) processLazyRefCount() {
+	if n.lazyRefCount == 0 {
+		return
+	}
 	n.refCount += n.lazyRefCount
 	if n.leaf != nil {
 		n.leaf.refCount += n.lazyRefCount
@@ -341,10 +344,10 @@ func (n *Node[T]) processLazyRefCount() {
 	n.lazyRefCount = 0
 }
 
-func (n *Node[T]) clone() *Node[T] {
+func (n *Node[T]) clone(deep bool) *Node[T] {
+	n.processLazyRefCount()
 	nn := new(Node[T])
 	nn.refCount = n.refCount
-	nn.lazyRefCount = n.lazyRefCount
 	if n.getMutateCh() != nil {
 		nn.setMutateCh(n.getMutateCh())
 	}
@@ -353,13 +356,21 @@ func (n *Node[T]) clone() *Node[T] {
 		copy(nn.prefix, n.prefix)
 	}
 	if n.leaf != nil {
-		nn.leaf = n.leaf
+		if deep {
+			nn.leaf = n.leaf.clone()
+		} else {
+			nn.leaf = n.leaf
+		}
 	}
 	if len(n.edges) != 0 {
 		nn.edges = make([]edge[T], len(n.edges))
 		for idx, ed := range n.edges {
 			nn.edges[idx].label = ed.label
-			nn.edges[idx].node = ed.node
+			if deep {
+				nn.edges[idx].node = ed.node.clone(deep)
+			} else {
+				nn.edges[idx].node = ed.node
+			}
 		}
 	}
 	return nn
@@ -405,4 +416,14 @@ func (n *leafNode[T]) getMutateCh() chan struct{} {
 
 func (n *leafNode[T]) setMutateCh(ch chan struct{}) {
 	n.mutateCh.Store(&ch)
+}
+
+func (n *leafNode[T]) clone() *leafNode[T] {
+	nn := &leafNode[T]{}
+	nn.key = make([]byte, len(n.key))
+	copy(nn.key, n.key)
+	nn.val = n.val
+	nn.setMutateCh(n.getMutateCh())
+	nn.refCount = n.refCount
+	return nn
 }
