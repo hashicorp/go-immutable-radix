@@ -49,11 +49,11 @@ func (n *Node) isLeaf() bool {
 func (n *Node) addEdge(e edge) {
 	prevMinL, _ := n.MinimumLeaf()
 	prevMaxL, _ := n.MaximumLeaf()
-	var outerPrev *LeafNode[T]
+	var outerPrev *LeafNode
 	if prevMinL != nil {
 		outerPrev = prevMinL.prevLeaf
 	}
-	var outerNext *LeafNode[T]
+	var outerNext *LeafNode
 	if prevMaxL != nil {
 		outerNext = prevMaxL.nextLeaf
 	}
@@ -66,9 +66,9 @@ func (n *Node) addEdge(e edge) {
 		copy(n.edges[idx+1:], n.edges[idx:num])
 		n.edges[idx] = e
 	}
-	for itr := 0; itr < len(n.edges)-1; itr {
+	for itr := 0; itr < len(n.edges)-1; itr++ {
 		maxLFirst, _ := n.edges[itr].node.MaximumLeaf()
-		minLSecond, _ := n.edges[itr1].node.MinimumLeaf()
+		minLSecond, _ := n.edges[itr+1].node.MinimumLeaf()
 		maxLFirst.nextLeaf = minLSecond
 		minLSecond.prevLeaf = maxLFirst
 	}
