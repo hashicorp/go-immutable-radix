@@ -257,7 +257,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		}
 
 		nc := t.writeNode(n, true)
-		nc.leaf = &leafNode{
+		nc.leaf = &LeafNode{
 			mutateCh: make(chan struct{}),
 			key:      k,
 			val:      v,
@@ -274,7 +274,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 			label: search[0],
 			node: &Node{
 				mutateCh: make(chan struct{}),
-				leaf: &leafNode{
+				leaf: &LeafNode{
 					mutateCh: make(chan struct{}),
 					key:      k,
 					val:      v,
@@ -320,7 +320,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	modChild.prefix = modChild.prefix[commonPrefix:]
 
 	// Create a new leaf node
-	leaf := &leafNode{
+	leaf := &LeafNode{
 		mutateCh: make(chan struct{}),
 		key:      k,
 		val:      v,
@@ -346,7 +346,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 }
 
 // delete does a recursive deletion
-func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
+func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *LeafNode) {
 	// Check for key exhaustion
 	if len(search) == 0 {
 		if !n.isLeaf() {

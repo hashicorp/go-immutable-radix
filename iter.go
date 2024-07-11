@@ -7,8 +7,11 @@ import (
 // Iterator is used to iterate over a set of nodes
 // in pre-order
 type Iterator struct {
-	node  *Node
-	stack []edges
+	node           *Node
+	stack          []edges
+	leafNode       *LeafNode
+	key            []byte
+	seekLowerBound bool
 }
 
 // SeekPrefixWatch is used to seek the iterator to a given prefix
@@ -16,6 +19,7 @@ type Iterator struct {
 func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	// Wipe the stack
 	i.stack = nil
+	i.key = prefix
 	n := i.node
 	watch = n.mutateCh
 	search := prefix
@@ -78,6 +82,7 @@ func (i *Iterator) recurseMin(n *Node) *Node {
 // predict based on the radix structure which node(s) changes might affect the
 // result.
 func (i *Iterator) SeekLowerBound(key []byte) {
+	i.seekLowerBound = true
 	// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
 	// go because we need only a subset of edges of many nodes in the path to the
 	// leaf with the lower bound. Note that the iterator will still recurse into
@@ -169,6 +174,29 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 
 // Next returns the next node in order
 func (i *Iterator) Next() ([]byte, interface{}, bool) {
+
+	if !i.seekLowerBound {
+		var zero interface{}
+
+		if i.node != nil && i.leafNode == nil {
+			i.leafNode, _ = i.node.MinimumLeaf()
+			return i.leafNode.key, i.leafNode.val, true
+		}
+
+		if i.leafNode != nil {
+			i.leafNode = i.leafNode.nextLeaf
+		}
+
+		if i.leafNode != nil {
+			if bytes.HasPrefix(i.leafNode.key, i.key) {
+				return i.leafNode.key, i.leafNode.val, true
+			}
+			return nil, zero, false
+		}
+
+		return nil, zero, false
+	}
+
 	// Initialize our stack if needed
 	if i.stack == nil && i.node != nil {
 		i.stack = []edges{

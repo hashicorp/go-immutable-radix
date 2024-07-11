@@ -10,11 +10,13 @@ import (
 // be terminated.
 type WalkFn func(k []byte, v interface{}) bool
 
-// leafNode is used to represent a value
-type leafNode struct {
+// LeafNode is used to represent a value
+type LeafNode struct {
 	mutateCh chan struct{}
 	key      []byte
 	val      interface{}
+	nextLeaf *LeafNode
+	prevLeaf *LeafNode
 }
 
 // edge is used to represent an edge node
@@ -29,7 +31,7 @@ type Node struct {
 	mutateCh chan struct{}
 
 	// leaf is used to store possible leaf
-	leaf *leafNode
+	leaf *LeafNode
 
 	// prefix is the common prefix we ignore
 	prefix []byte
@@ -45,6 +47,16 @@ func (n *Node) isLeaf() bool {
 }
 
 func (n *Node) addEdge(e edge) {
+	prevMinL, _ := n.MinimumLeaf()
+	prevMaxL, _ := n.MaximumLeaf()
+	var outerPrev *LeafNode[T]
+	if prevMinL != nil {
+		outerPrev = prevMinL.prevLeaf
+	}
+	var outerNext *LeafNode[T]
+	if prevMaxL != nil {
+		outerNext = prevMaxL.nextLeaf
+	}
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
 		return n.edges[i].label >= e.label
@@ -54,6 +66,53 @@ func (n *Node) addEdge(e edge) {
 		copy(n.edges[idx+1:], n.edges[idx:num])
 		n.edges[idx] = e
 	}
+	for itr := 0; itr < len(n.edges)-1; itr {
+		maxLFirst, _ := n.edges[itr].node.MaximumLeaf()
+		minLSecond, _ := n.edges[itr1].node.MinimumLeaf()
+		maxLFirst.nextLeaf = minLSecond
+		minLSecond.prevLeaf = maxLFirst
+	}
+	minL, _ := n.MinimumLeaf()
+	maxL, _ := n.MaximumLeaf()
+	if outerPrev != nil {
+		outerPrev.nextLeaf = minL
+		minL.prevLeaf = outerPrev
+	}
+	if outerNext != nil {
+		outerNext.prevLeaf = maxL
+		maxL.nextLeaf = outerNext
+	}
+}
+
+// Minimum is used to return the minimum value in the tree
+func (n *Node) MinimumLeaf() (*LeafNode, bool) {
+	for {
+		if n.isLeaf() {
+			return n.leaf, true
+		}
+		if len(n.edges) > 0 {
+			n = n.edges[0].node
+		} else {
+			break
+		}
+	}
+	return nil, false
+}
+
+// Maximum is used to return the maximum value in the tree
+func (n *Node) MaximumLeaf() (*LeafNode, bool) {
+	for {
+		if num := len(n.edges); num > 0 {
+			n = n.edges[num-1].node // bug?
+			continue
+		}
+		if n.isLeaf() {
+			return n.leaf, true
+		} else {
+			break
+		}
+	}
+	return nil, false
 }
 
 func (n *Node) replaceEdge(e edge) {
@@ -142,7 +201,7 @@ func (n *Node) Get(k []byte) (interface{}, bool) {
 // LongestPrefix is like Get, but instead of an
 // exact match, it will return the longest prefix match.
 func (n *Node) LongestPrefix(k []byte) ([]byte, interface{}, bool) {
-	var last *leafNode
+	var last *LeafNode
 	search := k
 	for {
 		// Look for a leaf node
