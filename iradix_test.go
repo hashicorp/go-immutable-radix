@@ -5,8 +5,11 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
+	"sync"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/hashicorp/go-uuid"
 )
@@ -1885,7 +1888,7 @@ func generateDataset(size int) []string {
 
 func BenchmarkMixedOperations(b *testing.B) {
 	dataset := generateDataset(datasetSize)
-	r := New[int]()
+	r := New()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1907,7 +1910,7 @@ func BenchmarkMixedOperations(b *testing.B) {
 
 func BenchmarkGroupedOperations(b *testing.B) {
 	dataset := generateDataset(datasetSize)
-	art := New[int]()
+	art := New()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1929,7 +1932,7 @@ func BenchmarkGroupedOperations(b *testing.B) {
 }
 
 func BenchmarkInsertIRadix(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
@@ -1938,14 +1941,14 @@ func BenchmarkInsertIRadix(b *testing.B) {
 }
 
 func BenchmarkDeleteIRadix(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
 		r, _, _ = r.Insert([]byte(uuid1), n)
 		r, _, _ = r.Delete([]byte(uuid1))
 	}
-	art := New[int]()
+	art := New()
 	var wg sync.WaitGroup
 
 	const numKeys = 1000
@@ -1989,7 +1992,7 @@ func BenchmarkDeleteIRadix(b *testing.B) {
 }
 
 func BenchmarkDeletePrefixART(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
@@ -1999,7 +2002,7 @@ func BenchmarkDeletePrefixART(b *testing.B) {
 }
 
 func BenchmarkSearchART(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
@@ -2012,7 +2015,7 @@ func BenchmarkSearchART(b *testing.B) {
 }
 
 func BenchmarkLongestPrefix(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
@@ -2022,7 +2025,7 @@ func BenchmarkLongestPrefix(b *testing.B) {
 }
 
 func BenchmarkSeekPrefixWatch(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
@@ -2045,7 +2048,7 @@ func BenchmarkSeekPrefixWatch(b *testing.B) {
 }
 
 func BenchmarkSeekLowerBound(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
@@ -2068,7 +2071,7 @@ func BenchmarkSeekLowerBound(b *testing.B) {
 }
 
 func BenchmarkSeekReverseLowerBound(b *testing.B) {
-	r := New[int]()
+	r := New()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
