@@ -262,6 +262,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 			key:      k,
 			val:      v,
 		}
+		nc.computeLinks()
 		return nc, oldVal, didUpdate
 	}
 
@@ -295,6 +296,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		if newChild != nil {
 			nc := t.writeNode(n, false)
 			nc.edges[idx].node = newChild
+			nc.computeLinks()
 			return nc, oldVal, didUpdate
 		}
 		return nil, oldVal, didUpdate
@@ -330,6 +332,8 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	search = search[commonPrefix:]
 	if len(search) == 0 {
 		splitNode.leaf = leaf
+		splitNode.computeLinks()
+		nc.computeLinks()
 		return nc, nil, false
 	}
 
@@ -342,6 +346,8 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 			prefix:   search,
 		},
 	})
+	splitNode.computeLinks()
+	nc.computeLinks()
 	return nc, nil, false
 }
 
@@ -398,6 +404,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *LeafNode) {
 	} else {
 		nc.edges[idx].node = newChild
 	}
+	nc.computeLinks()
 	return nc, leaf
 }
 
@@ -410,6 +417,7 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 			nc.leaf = nil
 		}
 		nc.edges = nil
+		nc.computeLinks()
 		return nc, t.trackChannelsAndCount(n)
 	}
 
@@ -448,6 +456,7 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 	} else {
 		nc.edges[idx].node = newChild
 	}
+	nc.computeLinks()
 	return nc, numDeletions
 }
 

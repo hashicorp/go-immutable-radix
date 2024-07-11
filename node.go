@@ -46,17 +46,23 @@ func (n *Node) isLeaf() bool {
 	return n.leaf != nil
 }
 
+func (n *Node) computeLinks() {
+	for itr := 0; itr < len(n.edges); itr++ {
+		maxLFirst, _ := n.edges[itr].node.MaximumLeaf()
+		var minLSecond *LeafNode
+		if itr+1 < len(n.edges) {
+			minLSecond, _ = n.edges[itr+1].node.MinimumLeaf()
+		}
+		if maxLFirst != nil {
+			maxLFirst.nextLeaf = minLSecond
+		}
+		if minLSecond != nil {
+			minLSecond.prevLeaf = maxLFirst
+		}
+	}
+}
+
 func (n *Node) addEdge(e edge) {
-	prevMinL, _ := n.MinimumLeaf()
-	prevMaxL, _ := n.MaximumLeaf()
-	var outerPrev *LeafNode
-	if prevMinL != nil {
-		outerPrev = prevMinL.prevLeaf
-	}
-	var outerNext *LeafNode
-	if prevMaxL != nil {
-		outerNext = prevMaxL.nextLeaf
-	}
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
 		return n.edges[i].label >= e.label
@@ -66,22 +72,7 @@ func (n *Node) addEdge(e edge) {
 		copy(n.edges[idx+1:], n.edges[idx:num])
 		n.edges[idx] = e
 	}
-	for itr := 0; itr < len(n.edges)-1; itr++ {
-		maxLFirst, _ := n.edges[itr].node.MaximumLeaf()
-		minLSecond, _ := n.edges[itr+1].node.MinimumLeaf()
-		maxLFirst.nextLeaf = minLSecond
-		minLSecond.prevLeaf = maxLFirst
-	}
-	minL, _ := n.MinimumLeaf()
-	maxL, _ := n.MaximumLeaf()
-	if outerPrev != nil {
-		outerPrev.nextLeaf = minL
-		minL.prevLeaf = outerPrev
-	}
-	if outerNext != nil {
-		outerNext.prevLeaf = maxL
-		maxL.nextLeaf = outerNext
-	}
+	n.computeLinks()
 }
 
 // Minimum is used to return the minimum value in the tree
@@ -122,6 +113,7 @@ func (n *Node) replaceEdge(e edge) {
 	})
 	if idx < num && n.edges[idx].label == e.label {
 		n.edges[idx].node = e.node
+		n.computeLinks()
 		return
 	}
 	panic("replacing missing edge")

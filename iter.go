@@ -180,18 +180,23 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 
 		if i.node != nil && i.leafNode == nil {
 			i.leafNode, _ = i.node.MinimumLeaf()
-			return i.leafNode.key, i.leafNode.val, true
 		}
 
-		if i.leafNode != nil {
-			i.leafNode = i.leafNode.nextLeaf
-		}
+		for i.leafNode != nil {
 
-		if i.leafNode != nil {
 			if bytes.HasPrefix(i.leafNode.key, i.key) {
-				return i.leafNode.key, i.leafNode.val, true
+				res := i.leafNode
+				i.leafNode = i.leafNode.nextLeaf
+				if i.leafNode == nil {
+					i.node = nil
+				}
+				return res.key, res.val, true
 			}
-			return nil, zero, false
+			i.leafNode = i.leafNode.nextLeaf
+			if i.leafNode == nil {
+				i.node = nil
+			}
+
 		}
 
 		return nil, zero, false
