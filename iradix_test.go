@@ -1870,3 +1870,222 @@ func TestClone(t *testing.T) {
 		t.Fatalf("bad baz in t2")
 	}
 }
+
+const datasetSize = 100000
+
+func generateDataset(size int) []string {
+	rand.New(rand.NewSource(time.Now().UnixNano()))
+	dataset := make([]string, size)
+	for i := 0; i < size; i++ {
+		uuid1, _ := uuid.GenerateUUID()
+		dataset[i] = uuid1
+	}
+	return dataset
+}
+
+func BenchmarkMixedOperations(b *testing.B) {
+	dataset := generateDataset(datasetSize)
+	r := New[int]()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < datasetSize; j++ {
+			key := dataset[j]
+
+			// Randomly choose an operation
+			switch rand.Intn(3) {
+			case 0:
+				r, _, _ = r.Insert([]byte(key), j)
+			case 1:
+				r.Get([]byte(key))
+			case 2:
+				r, _, _ = r.Delete([]byte(key))
+			}
+		}
+	}
+}
+
+func BenchmarkGroupedOperations(b *testing.B) {
+	dataset := generateDataset(datasetSize)
+	art := New[int]()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Insert all keys
+		for _, key := range dataset {
+			art, _, _ = art.Insert([]byte(key), 0)
+		}
+
+		// Search all keys
+		for _, key := range dataset {
+			art.Get([]byte(key))
+		}
+
+		// Delete all keys
+		for _, key := range dataset {
+			art, _, _ = art.Delete([]byte(key))
+		}
+	}
+}
+
+func BenchmarkInsertIRadix(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+	}
+}
+
+func BenchmarkDeleteIRadix(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		r, _, _ = r.Delete([]byte(uuid1))
+	}
+	art := New[int]()
+	var wg sync.WaitGroup
+
+	const numKeys = 1000
+	keys := make([]string, numKeys)
+	values := make([]int, numKeys)
+
+	for i := 0; i < numKeys; i++ {
+		keys[i] = "key" + strconv.Itoa(i)
+		values[i] = i
+	}
+
+	rand.Seed(time.Now().UnixNano())
+
+	txnTree := art.Txn()
+
+	// Function to perform a transaction with multiple inserts and deletes
+	txn := func() {
+		defer wg.Done()
+		numOps := rand.Intn(10) + 1 // Each transaction will have 1 to 10 operations
+
+		for i := 0; i < numOps; i++ {
+			keyIdx := rand.Intn(numKeys)
+			if rand.Float32() < 0.5 {
+				txnTree.Insert([]byte(keys[keyIdx]), values[keyIdx])
+			} else {
+				//art, _, _ = art.Delete([]byte(keys[keyIdx]))
+			}
+		}
+	}
+
+	art = txnTree.Commit()
+
+	// Create a large number of transactions
+	numTxns := 1
+	for i := 0; i < numTxns; i++ {
+		wg.Add(1)
+		go txn()
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkDeletePrefixART(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		r, _ = r.DeletePrefix([]byte(""))
+	}
+}
+
+func BenchmarkSearchART(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		val, _ := r.Get([]byte(uuid1))
+		if val != n {
+			b.Fatalf("hello")
+		}
+	}
+}
+
+func BenchmarkLongestPrefix(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		_, _, _ = r.Root().LongestPrefix([]byte(""))
+	}
+}
+
+func BenchmarkSeekPrefixWatch(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		iter := r.root.Iterator()
+		iter.SeekPrefixWatch([]byte(""))
+		count := 0
+		for {
+			_, _, f := iter.Next()
+			if f {
+				count++
+			} else {
+				break
+			}
+		}
+		if r.Len() != count {
+			//b.Fatalf("hello")
+		}
+	}
+}
+
+func BenchmarkSeekLowerBound(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		iter := r.root.Iterator()
+		iter.SeekLowerBound([]byte(""))
+		count := 0
+		for {
+			_, _, f := iter.Next()
+			if f {
+				count++
+			} else {
+				break
+			}
+		}
+		if r.Len() != count {
+			//b.Fatalf("hello")
+		}
+	}
+}
+
+func BenchmarkSeekReverseLowerBound(b *testing.B) {
+	r := New[int]()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		uuid1, _ := uuid.GenerateUUID()
+		r, _, _ = r.Insert([]byte(uuid1), n)
+		iter := r.root.ReverseIterator()
+		iter.SeekReverseLowerBound([]byte(""))
+		count := 0
+		for {
+			_, _, f := iter.Previous()
+			if f {
+				count++
+			} else {
+				break
+			}
+		}
+		if r.Len() != count {
+			//b.Fatalf("hello")
+		}
+	}
+}
