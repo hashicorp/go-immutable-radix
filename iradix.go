@@ -239,6 +239,8 @@ func (t *Txn) mergeChild(n *Node) {
 	// Merge the nodes.
 	n.prefix = concat(n.prefix, child.prefix)
 	n.leaf = child.leaf
+	n.minLeaf = child.leaf
+	n.maxLeaf = child.leaf
 	if len(child.edges) != 0 {
 		n.edges = make([]edge, len(child.edges))
 		copy(n.edges, child.edges)
@@ -378,6 +380,8 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *LeafNode) {
 		// Remove the leaf node
 		nc := t.writeNode(n, true)
 		nc.leaf = nil
+		nc.minLeaf = nil
+		nc.maxLeaf = nil
 
 		// Check if this node should be merged
 		if n != t.root && len(nc.edges) == 1 {
