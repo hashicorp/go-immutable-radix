@@ -44,11 +44,26 @@ type Node struct {
 	edges edges
 }
 
+func (l *LeafNode) clone() *LeafNode {
+	if l == nil {
+		return nil
+	}
+	return &LeafNode{
+		mutateCh: l.mutateCh,
+		key:      l.key,
+		val:      l.val,
+		nextLeaf: l.nextLeaf,
+		prevLeaf: l.prevLeaf,
+	}
+}
+
 func (n *Node) isLeaf() bool {
 	return n.leaf != nil
 }
 
 func (n *Node) updateMinMaxLeaves() {
+	n.minLeaf = nil
+	n.maxLeaf = nil
 	if n.leaf != nil {
 		n.minLeaf = n.leaf
 	} else if len(n.edges) > 0 {

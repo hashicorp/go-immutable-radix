@@ -240,7 +240,6 @@ func (t *Txn) mergeChild(n *Node) {
 	n.prefix = concat(n.prefix, child.prefix)
 	n.leaf = child.leaf
 	n.minLeaf = child.leaf
-	n.maxLeaf = child.leaf
 	if len(child.edges) != 0 {
 		n.edges = make([]edge, len(child.edges))
 		copy(n.edges, child.edges)
@@ -266,8 +265,6 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 			key:      k,
 			val:      v,
 		}
-		nc.minLeaf = nc.leaf
-		nc.maxLeaf = nc.leaf
 		nc.computeLinks()
 		return nc, oldVal, didUpdate
 	}
@@ -430,8 +427,6 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 		nc := t.writeNode(n, true)
 		if n.isLeaf() {
 			nc.leaf = nil
-			nc.minLeaf = nil
-			nc.maxLeaf = nil
 		}
 		nc.edges = nil
 		nc.computeLinks()
