@@ -182,6 +182,8 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 	nc := &Node{
 		mutateCh: make(chan struct{}),
 		leaf:     n.leaf,
+		minLeaf:  n.minLeaf,
+		maxLeaf:  n.maxLeaf,
 	}
 	if n.prefix != nil {
 		nc.prefix = make([]byte, len(n.prefix))
@@ -262,6 +264,8 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 			key:      k,
 			val:      v,
 		}
+		nc.minLeaf = nc.leaf
+		nc.maxLeaf = nc.leaf
 		nc.computeLinks()
 		return nc, oldVal, didUpdate
 	}
@@ -271,16 +275,19 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 
 	// No edge, create one
 	if child == nil {
+		leaf := &LeafNode{
+			mutateCh: make(chan struct{}),
+			key:      k,
+			val:      v,
+		}
 		e := edge{
 			label: search[0],
 			node: &Node{
 				mutateCh: make(chan struct{}),
-				leaf: &LeafNode{
-					mutateCh: make(chan struct{}),
-					key:      k,
-					val:      v,
-				},
-				prefix: search,
+				leaf:     leaf,
+				minLeaf:  leaf,
+				maxLeaf:  leaf,
+				prefix:   search,
 			},
 		}
 		nc := t.writeNode(n, false)
@@ -332,6 +339,8 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	search = search[commonPrefix:]
 	if len(search) == 0 {
 		splitNode.leaf = leaf
+		splitNode.minLeaf = leaf
+		splitNode.maxLeaf = leaf
 		splitNode.computeLinks()
 		nc.computeLinks()
 		return nc, nil, false
@@ -343,6 +352,8 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		node: &Node{
 			mutateCh: make(chan struct{}),
 			leaf:     leaf,
+			minLeaf:  leaf,
+			maxLeaf:  leaf,
 			prefix:   search,
 		},
 	})

@@ -31,7 +31,9 @@ type Node struct {
 	mutateCh chan struct{}
 
 	// leaf is used to store possible leaf
-	leaf *LeafNode
+	leaf    *LeafNode
+	minLeaf *LeafNode
+	maxLeaf *LeafNode
 
 	// prefix is the common prefix we ignore
 	prefix []byte
@@ -46,7 +48,22 @@ func (n *Node) isLeaf() bool {
 	return n.leaf != nil
 }
 
+func (n *Node) updateMinMaxLeaves() {
+	if n.leaf != nil {
+		n.minLeaf = n.leaf
+	} else if len(n.edges) > 0 {
+		n.minLeaf = n.edges[0].node.minLeaf
+	}
+	if len(n.edges) > 0 {
+		n.maxLeaf = n.edges[len(n.edges)-1].node.maxLeaf
+	}
+	if n.maxLeaf == nil && n.leaf != nil {
+		n.maxLeaf = n.leaf
+	}
+}
+
 func (n *Node) computeLinks() {
+	n.updateMinMaxLeaves()
 	for itr := 0; itr < len(n.edges); itr++ {
 		maxLFirst, _ := n.edges[itr].node.MaximumLeaf()
 		var minLSecond *LeafNode
@@ -77,31 +94,16 @@ func (n *Node) addEdge(e edge) {
 
 // Minimum is used to return the minimum value in the tree
 func (n *Node) MinimumLeaf() (*LeafNode, bool) {
-	for {
-		if n.isLeaf() {
-			return n.leaf, true
-		}
-		if len(n.edges) > 0 {
-			n = n.edges[0].node
-		} else {
-			break
-		}
+	if n.minLeaf != nil {
+		return n.minLeaf, true
 	}
 	return nil, false
 }
 
 // Maximum is used to return the maximum value in the tree
 func (n *Node) MaximumLeaf() (*LeafNode, bool) {
-	for {
-		if num := len(n.edges); num > 0 {
-			n = n.edges[num-1].node // bug?
-			continue
-		}
-		if n.isLeaf() {
-			return n.leaf, true
-		} else {
-			break
-		}
+	if n.maxLeaf != nil {
+		return n.maxLeaf, true
 	}
 	return nil, false
 }
