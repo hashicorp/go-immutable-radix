@@ -430,6 +430,8 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 		nc := t.writeNode(n, true)
 		if n.isLeaf() {
 			nc.leaf = nil
+			nc.minLeaf = nil
+			nc.maxLeaf = nil
 		}
 		nc.edges = nil
 		nc.computeLinks()
