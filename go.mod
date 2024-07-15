@@ -1,4 +1,4 @@
-module github.com/hashicorp/go-immutable-radix
+module github.com/absolutelightning/go-immutable-radix
 
 go 1.22.4
 
