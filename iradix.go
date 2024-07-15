@@ -38,6 +38,13 @@ func New() *Tree {
 	return t
 }
 
+func (t *Tree) Clone() *Tree {
+	return &Tree{
+		root: t.root.Clone(),
+		size: t.size,
+	}
+}
+
 // Len is used to return the number of elements in the tree
 func (t *Tree) Len() int {
 	return t.size

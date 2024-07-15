@@ -158,6 +158,41 @@ func (n *Node) delEdge(label byte) {
 	}
 }
 
+func (l *LeafNode) Clone() *LeafNode {
+
+	if l == nil {
+		return nil
+	}
+
+	valCopy := l.val
+
+	if _, ok := valCopy.(*Tree); ok {
+		valCopy = l.val.(*Tree).Clone()
+	}
+
+	return &LeafNode{
+		mutateCh: l.mutateCh,
+		key:      l.key,
+		val:      valCopy,
+	}
+}
+
+func (n *Node) Clone() *Node {
+	nc := &Node{
+		mutateCh: n.mutateCh,
+		leaf:     n.leaf.Clone(),
+		prefix:   n.prefix,
+	}
+	nc.minLeaf = nc.leaf
+	nc.maxLeaf = nc.leaf
+	nc.edges = make(edges, len(n.edges))
+	for itr, ed := range n.edges {
+		nc.edges[itr] = edge{ed.label, ed.node.Clone()}
+	}
+	nc.computeLinks()
+	return nc
+}
+
 func (n *Node) GetWatch(k []byte) (<-chan struct{}, interface{}, bool) {
 	search := k
 	watch := n.mutateCh
