@@ -191,10 +191,10 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 					i.node = nil
 				}
 				return res.key, res.val, true
-			}
-			i.leafNode = i.leafNode.nextLeaf
-			if i.leafNode == nil {
+			} else {
+				i.leafNode = nil
 				i.node = nil
+				break
 			}
 
 		}
