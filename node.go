@@ -3,7 +3,8 @@ package iradix
 import (
 	"bytes"
 	"sort"
-	"sync"
+	"sync/atomic"
+	"unsafe"
 )
 
 // WalkFn is used when walking the tree. Takes a
@@ -16,45 +17,24 @@ type LeafNode struct {
 	mutateCh chan struct{}
 	key      []byte
 	val      interface{}
-	nextLeaf *LeafNode
-	prevLeaf *LeafNode
-	mu       *sync.RWMutex
+	nextLeaf unsafe.Pointer
+	prevLeaf unsafe.Pointer
 }
 
 func (n *LeafNode) setNextLeaf(l *LeafNode) {
-	if n.mu == nil {
-		n.mu = &sync.RWMutex{}
-	}
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.nextLeaf = l
-}
-
-func (n *LeafNode) setPrevLeaf(l *LeafNode) {
-	if n.mu == nil {
-		n.mu = &sync.RWMutex{}
-	}
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.prevLeaf = l
+	atomic.StorePointer(&n.nextLeaf, unsafe.Pointer(l))
 }
 
 func (n *LeafNode) getNextLeaf() *LeafNode {
-	if n.mu == nil {
-		n.mu = &sync.RWMutex{}
-	}
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	return n.nextLeaf
+	return (*LeafNode)(atomic.LoadPointer(&n.nextLeaf))
+}
+
+func (n *LeafNode) setPrevLeaf(l *LeafNode) {
+	atomic.StorePointer(&n.prevLeaf, unsafe.Pointer(l))
 }
 
 func (n *LeafNode) getPrevLeaf() *LeafNode {
-	if n.mu == nil {
-		n.mu = &sync.RWMutex{}
-	}
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	return n.prevLeaf
+	return (*LeafNode)(atomic.LoadPointer(&n.prevLeaf))
 }
 
 // edge is used to represent an edge node
