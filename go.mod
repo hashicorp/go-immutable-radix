@@ -1,4 +1,6 @@
-module github.com/hashicorp/go-immutable-radix
+module github.com/absolutelightning/go-immutable-radix
+
+go 1.22.4
 
 require (
 	github.com/hashicorp/go-uuid v1.0.0

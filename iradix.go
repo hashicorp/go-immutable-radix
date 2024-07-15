@@ -38,6 +38,13 @@ func New() *Tree {
 	return t
 }
 
+func (t *Tree) Clone() *Tree {
+	return &Tree{
+		root: t.root.Clone(),
+		size: t.size,
+	}
+}
+
 // Len is used to return the number of elements in the tree
 func (t *Tree) Len() int {
 	return t.size
@@ -182,6 +189,8 @@ func (t *Txn) writeNode(n *Node, forLeafUpdate bool) *Node {
 	nc := &Node{
 		mutateCh: make(chan struct{}),
 		leaf:     n.leaf,
+		minLeaf:  n.minLeaf,
+		maxLeaf:  n.maxLeaf,
 	}
 	if n.prefix != nil {
 		nc.prefix = make([]byte, len(n.prefix))
@@ -237,6 +246,7 @@ func (t *Txn) mergeChild(n *Node) {
 	// Merge the nodes.
 	n.prefix = concat(n.prefix, child.prefix)
 	n.leaf = child.leaf
+	n.minLeaf = child.leaf
 	if len(child.edges) != 0 {
 		n.edges = make([]edge, len(child.edges))
 		copy(n.edges, child.edges)
@@ -257,11 +267,12 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		}
 
 		nc := t.writeNode(n, true)
-		nc.leaf = &leafNode{
+		nc.leaf = &LeafNode{
 			mutateCh: make(chan struct{}),
 			key:      k,
 			val:      v,
 		}
+		nc.computeLinks()
 		return nc, oldVal, didUpdate
 	}
 
@@ -270,16 +281,19 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 
 	// No edge, create one
 	if child == nil {
+		leaf := &LeafNode{
+			mutateCh: make(chan struct{}),
+			key:      k,
+			val:      v,
+		}
 		e := edge{
 			label: search[0],
 			node: &Node{
 				mutateCh: make(chan struct{}),
-				leaf: &leafNode{
-					mutateCh: make(chan struct{}),
-					key:      k,
-					val:      v,
-				},
-				prefix: search,
+				leaf:     leaf,
+				minLeaf:  leaf,
+				maxLeaf:  leaf,
+				prefix:   search,
 			},
 		}
 		nc := t.writeNode(n, false)
@@ -295,6 +309,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		if newChild != nil {
 			nc := t.writeNode(n, false)
 			nc.edges[idx].node = newChild
+			nc.computeLinks()
 			return nc, oldVal, didUpdate
 		}
 		return nil, oldVal, didUpdate
@@ -320,7 +335,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	modChild.prefix = modChild.prefix[commonPrefix:]
 
 	// Create a new leaf node
-	leaf := &leafNode{
+	leaf := &LeafNode{
 		mutateCh: make(chan struct{}),
 		key:      k,
 		val:      v,
@@ -330,6 +345,10 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 	search = search[commonPrefix:]
 	if len(search) == 0 {
 		splitNode.leaf = leaf
+		splitNode.minLeaf = leaf
+		splitNode.maxLeaf = leaf
+		splitNode.computeLinks()
+		nc.computeLinks()
 		return nc, nil, false
 	}
 
@@ -339,14 +358,18 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		node: &Node{
 			mutateCh: make(chan struct{}),
 			leaf:     leaf,
+			minLeaf:  leaf,
+			maxLeaf:  leaf,
 			prefix:   search,
 		},
 	})
+	splitNode.computeLinks()
+	nc.computeLinks()
 	return nc, nil, false
 }
 
 // delete does a recursive deletion
-func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
+func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *LeafNode) {
 	// Check for key exhaustion
 	if len(search) == 0 {
 		if !n.isLeaf() {
@@ -361,6 +384,8 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 		// Remove the leaf node
 		nc := t.writeNode(n, true)
 		nc.leaf = nil
+		nc.minLeaf = nil
+		nc.maxLeaf = nil
 
 		// Check if this node should be merged
 		if n != t.root && len(nc.edges) == 1 {
@@ -398,6 +423,7 @@ func (t *Txn) delete(parent, n *Node, search []byte) (*Node, *leafNode) {
 	} else {
 		nc.edges[idx].node = newChild
 	}
+	nc.computeLinks()
 	return nc, leaf
 }
 
@@ -410,6 +436,7 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 			nc.leaf = nil
 		}
 		nc.edges = nil
+		nc.computeLinks()
 		return nc, t.trackChannelsAndCount(n)
 	}
 
@@ -448,6 +475,7 @@ func (t *Txn) deletePrefix(parent, n *Node, search []byte) (*Node, int) {
 	} else {
 		nc.edges[idx].node = newChild
 	}
+	nc.computeLinks()
 	return nc, numDeletions
 }
 
