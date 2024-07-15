@@ -184,7 +184,7 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 
 		if i.leafNode != nil && bytes.HasPrefix(i.leafNode.key, i.key) {
 			res := i.leafNode
-			i.leafNode = i.leafNode.nextLeaf
+			i.leafNode = i.leafNode.getNextLeaf()
 			if i.leafNode == nil {
 				i.node = nil
 			}

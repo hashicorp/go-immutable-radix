@@ -3,6 +3,7 @@ package iradix
 import (
 	"bytes"
 	"sort"
+	"sync"
 )
 
 // WalkFn is used when walking the tree. Takes a
@@ -17,6 +18,43 @@ type LeafNode struct {
 	val      interface{}
 	nextLeaf *LeafNode
 	prevLeaf *LeafNode
+	mu       *sync.RWMutex
+}
+
+func (n *LeafNode) setNextLeaf(l *LeafNode) {
+	if n.mu == nil {
+		n.mu = &sync.RWMutex{}
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.nextLeaf = l
+}
+
+func (n *LeafNode) setPrevLeaf(l *LeafNode) {
+	if n.mu == nil {
+		n.mu = &sync.RWMutex{}
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.prevLeaf = l
+}
+
+func (n *LeafNode) getNextLeaf() *LeafNode {
+	if n.mu == nil {
+		n.mu = &sync.RWMutex{}
+	}
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.nextLeaf
+}
+
+func (n *LeafNode) getPrevLeaf() *LeafNode {
+	if n.mu == nil {
+		n.mu = &sync.RWMutex{}
+	}
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.prevLeaf
 }
 
 // edge is used to represent an edge node
@@ -73,10 +111,10 @@ func (n *Node) computeLinks() {
 			minLSecond, _ = n.edges[itr+1].node.MinimumLeaf()
 		}
 		if maxLFirst != nil {
-			maxLFirst.nextLeaf = minLSecond
+			maxLFirst.setNextLeaf(minLSecond)
 		}
 		if minLSecond != nil {
-			minLSecond.prevLeaf = maxLFirst
+			minLSecond.setPrevLeaf(maxLFirst)
 		}
 	}
 }
