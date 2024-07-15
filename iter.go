@@ -182,7 +182,7 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 			i.leafNode, _ = i.node.MinimumLeaf()
 		}
 
-		if bytes.HasPrefix(i.leafNode.key, i.key) {
+		if i.leafNode != nil && bytes.HasPrefix(i.leafNode.key, i.key) {
 			res := i.leafNode
 			i.leafNode = i.leafNode.nextLeaf
 			if i.leafNode == nil {
