@@ -298,6 +298,7 @@ func (t *Txn) insert(n *Node, k, search []byte, v interface{}) (*Node, interface
 		}
 		nc := t.writeNode(n, false)
 		nc.addEdge(e)
+		nc.computeLinks()
 		return nc, nil, false
 	}
 
