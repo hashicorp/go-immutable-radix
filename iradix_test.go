@@ -168,7 +168,6 @@ func TestRadix(t *testing.T) {
 }
 
 func TestRoot(t *testing.T) {
-	t.Skip()
 	r := New()
 	r, _, ok := r.Delete(nil)
 	if ok {
