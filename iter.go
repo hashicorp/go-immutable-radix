@@ -19,6 +19,7 @@ type Iterator struct {
 // and returns the watch channel of the finest granularity
 func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	// Wipe the stack
+	i.seekLowerBound = false
 	i.stack = nil
 	i.key = prefix
 	n := i.node
