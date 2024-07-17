@@ -18,7 +18,6 @@ type LeafNode struct {
 	key      []byte
 	val      interface{}
 	nextLeaf unsafe.Pointer
-	prevLeaf unsafe.Pointer
 }
 
 func (n *LeafNode) setNextLeaf(l *LeafNode) {
@@ -27,14 +26,6 @@ func (n *LeafNode) setNextLeaf(l *LeafNode) {
 
 func (n *LeafNode) getNextLeaf() *LeafNode {
 	return (*LeafNode)(atomic.LoadPointer(&n.nextLeaf))
-}
-
-func (n *LeafNode) setPrevLeaf(l *LeafNode) {
-	atomic.StorePointer(&n.prevLeaf, unsafe.Pointer(l))
-}
-
-func (n *LeafNode) getPrevLeaf() *LeafNode {
-	return (*LeafNode)(atomic.LoadPointer(&n.prevLeaf))
 }
 
 // edge is used to represent an edge node
@@ -97,9 +88,6 @@ func (n *Node) computeLinks() {
 		}
 		if maxLFirst != nil {
 			maxLFirst.setNextLeaf(minLSecond)
-		}
-		if minLSecond != nil {
-			minLSecond.setPrevLeaf(maxLFirst)
 		}
 	}
 }
