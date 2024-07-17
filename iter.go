@@ -7,11 +7,12 @@ import (
 // Iterator is used to iterate over a set of nodes
 // in pre-order
 type Iterator struct {
-	node           *Node
-	stack          []edges
-	leafNode       *LeafNode
-	key            []byte
-	seekLowerBound bool
+	node               *Node
+	stack              []edges
+	leafNode           *LeafNode
+	key                []byte
+	seekLowerBound     bool
+	seekLowerBoundFlag bool
 }
 
 // SeekPrefixWatch is used to seek the iterator to a given prefix
@@ -165,7 +166,8 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 
 	if i.seekLowerBound {
 		for i.leafNode != nil {
-			if bytes.Compare(i.leafNode.key, i.key) >= 0 {
+			if i.seekLowerBoundFlag || bytes.Compare(i.leafNode.key, i.key) >= 0 {
+				i.seekLowerBoundFlag = true
 				res := i.leafNode
 				i.leafNode = i.leafNode.getNextLeaf()
 				if i.leafNode == nil {
