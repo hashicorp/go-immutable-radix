@@ -96,20 +96,8 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 	// iterating the whole tree from the root node. Either way this needs to end
 	// up as nil so just set it here.
 	n := i.node
-	i.node = nil
+	i.key = key
 	search := key
-
-	found := func(n *Node) {
-		i.stack = append(i.stack, edges{edge{node: n}})
-	}
-
-	findMin := func(n *Node) {
-		n = i.recurseMin(n)
-		if n != nil {
-			found(n)
-			return
-		}
-	}
 
 	for {
 		// Compare current prefix with the search key's same-length prefix.
@@ -124,21 +112,20 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			// Prefix is larger, that means the lower bound is greater than the search
 			// and from now on we need to follow the minimum path to the smallest
 			// leaf under this subtree.
-			findMin(n)
+			i.node = n
 			return
 		}
 
 		if prefixCmp < 0 {
 			// Prefix is smaller than search prefix, that means there is no lower
 			// bound
-			i.node = nil
 			return
 		}
 
 		// Prefix is equal, we are still heading for an exact match. If this is a
 		// leaf and an exact match we're done.
 		if n.leaf != nil && bytes.Equal(n.leaf.key, key) {
-			found(n)
+			i.node = n
 			return
 		}
 
@@ -152,21 +139,16 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 			// match or not a leaf. That means that the leaf value if it exists, and
 			// all child nodes must be strictly greater, the smallest key in this
 			// subtree must be the lower bound.
-			findMin(n)
+			i.node = n
 			return
 		}
 
+		i.node = n
 		// Otherwise, take the lower bound next edge.
-		idx, lbNode := n.getLowerBoundEdge(search[0])
+		_, lbNode := n.getLowerBoundEdge(search[0])
 		if lbNode == nil {
 			return
 		}
-
-		// Create stack edges for the all strictly higher edges in this node.
-		if idx+1 < len(n.edges) {
-			i.stack = append(i.stack, n.edges[idx+1:])
-		}
-
 		// Recurse
 		n = lbNode
 	}
@@ -175,20 +157,27 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 // Next returns the next node in order
 func (i *Iterator) Next() ([]byte, interface{}, bool) {
 
-	if !i.seekLowerBound {
-		var zero interface{}
+	var zero interface{}
 
-		if i.node != nil && i.leafNode == nil {
-			i.leafNode, _ = i.node.MinimumLeaf()
-		}
+	if i.node != nil && i.leafNode == nil {
+		i.leafNode, _ = i.node.MinimumLeaf()
+	}
 
-		if i.leafNode != nil && bytes.HasPrefix(i.leafNode.key, i.key) {
-			res := i.leafNode
-			i.leafNode = i.leafNode.getNextLeaf()
-			if i.leafNode == nil {
-				i.node = nil
+	if i.seekLowerBound {
+		for i.leafNode != nil {
+			if bytes.Compare(i.leafNode.key, i.key) >= 0 {
+				res := i.leafNode
+				i.leafNode = i.leafNode.getNextLeaf()
+				if i.leafNode == nil {
+					i.node = nil
+				}
+				return res.key, res.val, true
+			} else {
+				i.leafNode = i.leafNode.getNextLeaf()
+				if i.leafNode == nil {
+					i.node = nil
+				}
 			}
-			return res.key, res.val, true
 		}
 
 		i.leafNode = nil
@@ -197,37 +186,17 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 		return nil, zero, false
 	}
 
-	// Initialize our stack if needed
-	if i.stack == nil && i.node != nil {
-		i.stack = []edges{
-			{
-				edge{node: i.node},
-			},
+	if i.leafNode != nil && bytes.HasPrefix(i.leafNode.key, i.key) {
+		res := i.leafNode
+		i.leafNode = i.leafNode.getNextLeaf()
+		if i.leafNode == nil {
+			i.node = nil
 		}
+		return res.key, res.val, true
 	}
 
-	for len(i.stack) > 0 {
-		// Inspect the last element of the stack
-		n := len(i.stack)
-		last := i.stack[n-1]
-		elem := last[0].node
+	i.leafNode = nil
+	i.node = nil
 
-		// Update the stack
-		if len(last) > 1 {
-			i.stack[n-1] = last[1:]
-		} else {
-			i.stack = i.stack[:n-1]
-		}
-
-		// Push the edges onto the frontier
-		if len(elem.edges) > 0 {
-			i.stack = append(i.stack, elem.edges)
-		}
-
-		// Return the leaf values if any
-		if elem.leaf != nil {
-			return elem.leaf.key, elem.leaf.val, true
-		}
-	}
-	return nil, nil, false
+	return nil, zero, false
 }

@@ -84,6 +84,11 @@ func (n *Node) updateMinMaxLeaves() {
 
 func (n *Node) computeLinks() {
 	n.updateMinMaxLeaves()
+	if len(n.edges) > 0 {
+		if n.minLeaf != n.edges[0].node.minLeaf {
+			n.minLeaf.setNextLeaf(n.edges[0].node.minLeaf)
+		}
+	}
 	for itr := 0; itr < len(n.edges); itr++ {
 		maxLFirst, _ := n.edges[itr].node.MaximumLeaf()
 		var minLSecond *LeafNode
