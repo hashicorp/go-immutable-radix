@@ -2077,7 +2077,7 @@ func BenchmarkSeekReverseLowerBound(b *testing.B) {
 		uuid1, _ := uuid.GenerateUUID()
 		r, _, _ = r.Insert([]byte(uuid1), n)
 		iter := r.root.ReverseIterator()
-		iter.SeekReverseLowerBound([]byte(""))
+		iter.SeekReverseLowerBound(r.root.maxLeaf.key)
 		count := 0
 		for {
 			_, _, f := iter.Previous()
