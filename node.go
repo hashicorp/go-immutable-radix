@@ -54,11 +54,11 @@ type Node struct {
 	edges edges
 }
 
-func (n *Node) GetSnapshotNode() bool {
+func (n *Node) GetSnapshot() bool {
 	return n.snapshot
 }
 
-func (n *Node) SetSnapShotNode(snapshot bool) {
+func (n *Node) SetSnapshot(snapshot bool) {
 	n.snapshot = snapshot
 }
 
@@ -136,7 +136,6 @@ func (n *Node) replaceEdge(e edge) {
 	})
 	if idx < num && n.edges[idx].label == e.label {
 		n.edges[idx].node = e.node
-		n.edges[idx].node.snapshot = n.snapshot
 		return
 	}
 	panic("replacing missing edge")
@@ -148,7 +147,6 @@ func (n *Node) getEdge(label byte) (int, *Node) {
 		return n.edges[i].label >= label
 	})
 	if idx < num && n.edges[idx].label == label {
-		n.edges[idx].node.snapshot = n.snapshot
 		return idx, n.edges[idx].node
 	}
 	return -1, nil
