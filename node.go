@@ -38,7 +38,7 @@ type edge struct {
 type Node struct {
 	// mutateCh is closed if this node is modified
 	mutateCh chan struct{}
-	snapshot bool
+	snapshot *atomic.Bool
 
 	// leaf is used to store possible leaf
 	leaf    *LeafNode
@@ -55,11 +55,11 @@ type Node struct {
 }
 
 func (n *Node) GetSnapshot() bool {
-	return n.snapshot
+	return n.snapshot.Load()
 }
 
 func (n *Node) SetSnapshot(snapshot bool) {
-	n.snapshot = snapshot
+	n.snapshot.Store(snapshot)
 }
 
 func (n *Node) isLeaf() bool {
@@ -177,13 +177,15 @@ func (n *Node) delEdge(label byte) {
 }
 
 func (n *Node) Snapshot() *Node {
+	snapshotBool := &atomic.Bool{}
+	snapshotBool.Store(true)
 	nc := &Node{
 		mutateCh: n.mutateCh,
 		leaf:     n.leaf,
 		minLeaf:  n.minLeaf,
 		maxLeaf:  n.maxLeaf,
 		prefix:   n.prefix,
-		snapshot: true,
+		snapshot: snapshotBool,
 	}
 	nc.edges = make(edges, len(n.edges))
 	copy(nc.edges, n.edges)
@@ -295,7 +297,10 @@ func (n *Node) Maximum() ([]byte, interface{}, bool) {
 // Iterator is used to return an iterator at
 // the given node to walk the tree
 func (n *Node) Iterator() *Iterator {
-	return &Iterator{node: n, snapshotRoot: n.snapshot}
+	if n.snapshot != nil {
+		return &Iterator{node: n, snapshotRoot: n.snapshot.Load()}
+	}
+	return &Iterator{node: n}
 }
 
 // ReverseIterator is used to return an iterator at
