@@ -37,7 +37,8 @@ type edge struct {
 // Node is an immutable node in the radix tree
 type Node struct {
 	// mutateCh is closed if this node is modified
-	mutateCh chan struct{}
+	mutateCh     chan struct{}
+	snapShotNode bool
 
 	// leaf is used to store possible leaf
 	leaf    *LeafNode
@@ -51,6 +52,14 @@ type Node struct {
 	// We avoid a fully materialized slice to save memory,
 	// since in most cases we expect to be sparse
 	edges edges
+}
+
+func (n *Node) GetSnapshotNode() bool {
+	return n.snapShotNode
+}
+
+func (n *Node) SetSnapShotNode(snapshot bool) {
+	n.snapShotNode = snapshot
 }
 
 func (n *Node) isLeaf() bool {
@@ -127,6 +136,7 @@ func (n *Node) replaceEdge(e edge) {
 	})
 	if idx < num && n.edges[idx].label == e.label {
 		n.edges[idx].node = e.node
+		n.edges[idx].node.snapShotNode = n.snapShotNode
 		return
 	}
 	panic("replacing missing edge")
@@ -138,6 +148,7 @@ func (n *Node) getEdge(label byte) (int, *Node) {
 		return n.edges[i].label >= label
 	})
 	if idx < num && n.edges[idx].label == label {
+		n.edges[idx].node.snapShotNode = n.snapShotNode
 		return idx, n.edges[idx].node
 	}
 	return -1, nil
@@ -167,38 +178,17 @@ func (n *Node) delEdge(label byte) {
 	}
 }
 
-func (l *LeafNode) Clone() *LeafNode {
-
-	if l == nil {
-		return nil
-	}
-
-	valCopy := l.val
-
-	if _, ok := valCopy.(*Tree); ok {
-		valCopy = l.val.(*Tree).Clone()
-	}
-
-	return &LeafNode{
-		mutateCh: l.mutateCh,
-		key:      l.key,
-		val:      valCopy,
-	}
-}
-
-func (n *Node) Clone() *Node {
+func (n *Node) Snapshot() *Node {
 	nc := &Node{
-		mutateCh: n.mutateCh,
-		leaf:     n.leaf.Clone(),
-		prefix:   n.prefix,
+		mutateCh:     n.mutateCh,
+		leaf:         n.leaf,
+		minLeaf:      n.minLeaf,
+		maxLeaf:      n.maxLeaf,
+		prefix:       n.prefix,
+		snapShotNode: true,
 	}
-	nc.minLeaf = nc.leaf
-	nc.maxLeaf = nc.leaf
 	nc.edges = make(edges, len(n.edges))
-	for itr, ed := range n.edges {
-		nc.edges[itr] = edge{ed.label, ed.node.Clone()}
-	}
-	nc.computeLinks()
+	copy(nc.edges, n.edges)
 	return nc
 }
 

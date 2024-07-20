@@ -38,9 +38,9 @@ func New() *Tree {
 	return t
 }
 
-func (t *Tree) Clone() *Tree {
+func (t *Tree) Snapshot() *Tree {
 	return &Tree{
-		root: t.root.Clone(),
+		root: t.root.Snapshot(),
 		size: t.size,
 	}
 }
