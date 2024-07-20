@@ -55,10 +55,16 @@ type Node struct {
 }
 
 func (n *Node) GetSnapshot() bool {
+	if n.snapshot == nil {
+		return false
+	}
 	return n.snapshot.Load()
 }
 
 func (n *Node) SetSnapshot(snapshot bool) {
+	if n.snapshot == nil {
+		n.snapshot = &atomic.Bool{}
+	}
 	n.snapshot.Store(snapshot)
 }
 
