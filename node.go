@@ -37,8 +37,8 @@ type edge struct {
 // Node is an immutable node in the radix tree
 type Node struct {
 	// mutateCh is closed if this node is modified
-	mutateCh     chan struct{}
-	snapShotNode bool
+	mutateCh chan struct{}
+	snapshot bool
 
 	// leaf is used to store possible leaf
 	leaf    *LeafNode
@@ -55,11 +55,11 @@ type Node struct {
 }
 
 func (n *Node) GetSnapshotNode() bool {
-	return n.snapShotNode
+	return n.snapshot
 }
 
 func (n *Node) SetSnapShotNode(snapshot bool) {
-	n.snapShotNode = snapshot
+	n.snapshot = snapshot
 }
 
 func (n *Node) isLeaf() bool {
@@ -136,7 +136,7 @@ func (n *Node) replaceEdge(e edge) {
 	})
 	if idx < num && n.edges[idx].label == e.label {
 		n.edges[idx].node = e.node
-		n.edges[idx].node.snapShotNode = n.snapShotNode
+		n.edges[idx].node.snapshot = n.snapshot
 		return
 	}
 	panic("replacing missing edge")
@@ -148,7 +148,7 @@ func (n *Node) getEdge(label byte) (int, *Node) {
 		return n.edges[i].label >= label
 	})
 	if idx < num && n.edges[idx].label == label {
-		n.edges[idx].node.snapShotNode = n.snapShotNode
+		n.edges[idx].node.snapshot = n.snapshot
 		return idx, n.edges[idx].node
 	}
 	return -1, nil
@@ -180,12 +180,12 @@ func (n *Node) delEdge(label byte) {
 
 func (n *Node) Snapshot() *Node {
 	nc := &Node{
-		mutateCh:     n.mutateCh,
-		leaf:         n.leaf,
-		minLeaf:      n.minLeaf,
-		maxLeaf:      n.maxLeaf,
-		prefix:       n.prefix,
-		snapShotNode: true,
+		mutateCh: n.mutateCh,
+		leaf:     n.leaf,
+		minLeaf:  n.minLeaf,
+		maxLeaf:  n.maxLeaf,
+		prefix:   n.prefix,
+		snapshot: true,
 	}
 	nc.edges = make(edges, len(n.edges))
 	copy(nc.edges, n.edges)
