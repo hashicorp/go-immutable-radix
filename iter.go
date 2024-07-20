@@ -12,14 +12,13 @@ type Iterator struct {
 	leafNode       *LeafNode
 	key            []byte
 	seekLowerBound bool
-	snapshotNode   bool
+	snapshotRoot   bool
 }
 
 // SeekPrefixWatch is used to seek the iterator to a given prefix
 // and returns the watch channel of the finest granularity
 func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
-	if i.node.snapshot {
-		i.snapshotNode = true
+	if i.snapshotRoot {
 		// Wipe the stack
 		i.stack = nil
 		n := i.node
@@ -121,7 +120,7 @@ func (i *Iterator) recurseMin(n *Node) *Node {
 // predict based on the radix structure which node(s) changes might affect the
 // result.
 func (i *Iterator) SeekLowerBound(key []byte) {
-	if i.node.snapshot {
+	if i.snapshotRoot {
 		// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
 		// go because we need only a subset of edges of many nodes in the path to the
 		// leaf with the lower bound. Note that the iterator will still recurse into
@@ -285,7 +284,7 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 // Next returns the next node in order
 func (i *Iterator) Next() ([]byte, interface{}, bool) {
 
-	if i.snapshotNode {
+	if i.snapshotRoot {
 		// Initialize our stack if needed
 		if i.stack == nil && i.node != nil {
 			i.stack = []edges{

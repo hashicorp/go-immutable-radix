@@ -295,7 +295,7 @@ func (n *Node) Maximum() ([]byte, interface{}, bool) {
 // Iterator is used to return an iterator at
 // the given node to walk the tree
 func (n *Node) Iterator() *Iterator {
-	return &Iterator{node: n}
+	return &Iterator{node: n, snapshotRoot: n.snapshot}
 }
 
 // ReverseIterator is used to return an iterator at
