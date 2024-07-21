@@ -1948,7 +1948,7 @@ func BenchmarkDeleteIRadix(b *testing.B) {
 	}
 	b.ResetTimer()
 	for _, key := range keys {
-		r.Delete([]byte(key))
+		r, _, _ = r.Delete([]byte(key))
 	}
 }
 
