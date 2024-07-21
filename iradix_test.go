@@ -5,8 +5,6 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
-	"strconv"
-	"sync"
 	"testing"
 	"testing/quick"
 	"time"
@@ -1942,53 +1940,16 @@ func BenchmarkInsertIRadix(b *testing.B) {
 
 func BenchmarkDeleteIRadix(b *testing.B) {
 	r := New()
-	b.ResetTimer()
+	var keys []string
 	for n := 0; n < b.N; n++ {
 		uuid1, _ := uuid.GenerateUUID()
 		r, _, _ = r.Insert([]byte(uuid1), n)
-		r, _, _ = r.Delete([]byte(uuid1))
+		keys = append(keys, uuid1)
 	}
-	art := New()
-	var wg sync.WaitGroup
-
-	const numKeys = 1000
-	keys := make([]string, numKeys)
-	values := make([]int, numKeys)
-
-	for i := 0; i < numKeys; i++ {
-		keys[i] = "key" + strconv.Itoa(i)
-		values[i] = i
+	b.ResetTimer()
+	for _, key := range keys {
+		r.Delete([]byte(key))
 	}
-
-	rand.Seed(time.Now().UnixNano())
-
-	txnTree := art.Txn()
-
-	// Function to perform a transaction with multiple inserts and deletes
-	txn := func() {
-		defer wg.Done()
-		numOps := rand.Intn(10) + 1 // Each transaction will have 1 to 10 operations
-
-		for i := 0; i < numOps; i++ {
-			keyIdx := rand.Intn(numKeys)
-			if rand.Float32() < 0.5 {
-				txnTree.Insert([]byte(keys[keyIdx]), values[keyIdx])
-			} else {
-				//art, _, _ = art.Delete([]byte(keys[keyIdx]))
-			}
-		}
-	}
-
-	art = txnTree.Commit()
-
-	// Create a large number of transactions
-	numTxns := 1
-	for i := 0; i < numTxns; i++ {
-		wg.Add(1)
-		go txn()
-	}
-
-	wg.Wait()
 }
 
 func BenchmarkDeletePrefixART(b *testing.B) {
