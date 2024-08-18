@@ -74,6 +74,31 @@ func BenchmarkTestARTree_InsertAndSearchWords(b *testing.B) {
 		art, _, _ = art.Insert([]byte(lines[i%(len(lines))]), 0)
 	}
 }
+
+func BenchmarkTestARTree_InsertAndSearchWords1(b *testing.B) {
+
+	art := New[int]()
+
+	file, _ := os.Open("test-text/words.txt")
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var lines []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+	}
+
+	for _, line := range lines {
+		art, _, _ = art.Insert([]byte(line), 0)
+	}
+
+	b.ResetTimer()
+	for i := 1; i < b.N; i++ {
+		_, _ = art.Get([]byte(lines[i%(len(lines))]))
+	}
+}
+
 func TestRadix_HugeTxn(t *testing.T) {
 	r := New[int]()
 
