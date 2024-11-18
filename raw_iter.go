@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package iradix
 
 // rawIterator visits each of the nodes in the tree, even the ones that are not
