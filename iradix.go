@@ -251,7 +251,12 @@ func (t *Txn[T]) mergeChild(n *Node[T]) {
 	// Merge the nodes.
 	n.prefix = concat(n.prefix, child.prefix)
 	n.leaf = child.leaf
-	n.children = child.children
+	if len(child.children) != 0 {
+		n.children = make([]*Node[T], len(child.children))
+		copy(n.children, child.children)
+	} else {
+		n.children = nil
+	}
 	n.bitmap = child.bitmap
 }
 
