@@ -144,14 +144,15 @@ func (ri *ReverseIterator[T]) Previous() ([]byte, T, bool) {
 		if len(elem.children) > 0 && !alreadyExpanded {
 			ri.expandedParents[elem] = struct{}{}
 
+			// After processing children, we want to revisit this node (elem).
+			// Push it back as a single-node slice, so its leaf is considered after its children.
+			ri.i.stack = append(ri.i.stack, []*Node[T]{elem})
+		
 			// For reverse order, we want to visit the largest child first.
 			// By default, children are in ascending order. We rely on popping last element first,
 			// so we can append children as is. The last child in children is largest.
 			ri.i.stack = append(ri.i.stack, elem.children)
 
-			// After processing children, we want to revisit this node (elem).
-			// Push it back as a single-node slice, so its leaf is considered after its children.
-			ri.i.stack = append(ri.i.stack, []*Node[T]{elem})
 			continue
 		}
 
