@@ -8,8 +8,7 @@ import (
 type ReverseIterator[T any] struct {
 	i *Iterator[T]
 
-	// expandedParents stores parent nodes whose relevant children have
-	// already been pushed onto the stack.
+	// expandedParents keeps track of nodes whose children have been pushed.
 	expandedParents map[*Node[T]]struct{}
 }
 
@@ -30,9 +29,8 @@ func (ri *ReverseIterator[T]) SeekPrefix(prefix []byte) {
 	ri.i.SeekPrefixWatch(prefix)
 }
 
-// SeekReverseLowerBound sets the iterator to the largest key <= key.
+// SeekReverseLowerBound sets the iterator to the largest key <= 'key'.
 func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
-	// Clear the stack.
 	ri.i.stack = nil
 	n := ri.i.node
 	ri.i.node = nil
@@ -42,7 +40,7 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 		ri.expandedParents = make(map[*Node[T]]struct{})
 	}
 
-	// found adds a single node as a slice to the stack and marks it as expanded.
+	// found adds a single node as a slice and marks it as expanded
 	found := func(n *Node[T]) {
 		ri.i.stack = append(ri.i.stack, []*Node[T]{n})
 		ri.expandedParents[n] = struct{}{}
@@ -57,15 +55,14 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 		}
 
 		if prefixCmp < 0 {
-			// Current prefix < search prefix.
-			// For reverse lower bound, we want the largest leaf under this subtree.
-			// Push this node and let the iterator's Previous handle descending.
+			// n.prefix < search => reverse lower bound is under this subtree.
+			// Push this node; the reverse iteration (Previous) will descend into it.
 			ri.i.stack = append(ri.i.stack, []*Node[T]{n})
 			return
 		}
 
 		if prefixCmp > 0 {
-			// Current prefix > search prefix: no reverse lower bound here.
+			// n.prefix > search => no reverse lower bound here.
 			return
 		}
 
@@ -77,35 +74,31 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 				return
 			}
 
-			// Leaf is lower than key.
+			// Leaf < key (since not equal). If no children, this leaf is the lower bound.
 			if len(n.children) == 0 {
-				// This leaf is the lower bound.
 				found(n)
 				return
 			}
 
-			// Leaf with children.
-			// Push this node so we consider its leaf first.
+			// Leaf with children. Push node first, mark expanded.
 			ri.i.stack = append(ri.i.stack, []*Node[T]{n})
 			ri.expandedParents[n] = struct{}{}
 		}
 
-		// Consume matched prefix.
+		// Consume matched prefix
 		search = search[len(n.prefix):]
 
 		if len(search) == 0 {
-			// Exhausted the search key but not at a leaf.
-			// All children are greater than search, so no reverse lower bound here.
+			// Exhausted search key, not at a leaf, all children > search => no lower bound here.
 			return
 		}
 
-		// Find the lower bound child.
 		idx, lbNode := n.getLowerBoundEdge(search[0])
 		if idx == -1 {
 			idx = len(n.children)
 		}
 
-		// Children before idx are strictly lower than search.
+		// Children before idx are strictly lower than search
 		if idx > 0 {
 			ri.i.stack = append(ri.i.stack, n.children[:idx])
 		}
@@ -122,8 +115,8 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 // Previous returns the previous node in reverse order.
 func (ri *ReverseIterator[T]) Previous() ([]byte, T, bool) {
 	var zero T
-	// Initialize stack if needed.
 	if ri.i.stack == nil && ri.i.node != nil {
+		// Initialize stack with the root node if needed
 		ri.i.stack = append(ri.i.stack, []*Node[T]{ri.i.node})
 	}
 
@@ -132,49 +125,46 @@ func (ri *ReverseIterator[T]) Previous() ([]byte, T, bool) {
 	}
 
 	for len(ri.i.stack) > 0 {
+		// Get the top slice of nodes
 		n := len(ri.i.stack)
-		last := ri.i.stack[n-1]
-		m := len(last)
-		elem := last[m-1]
+		top := ri.i.stack[n-1]
+		m := len(top)
+		elem := top[m-1] // The top node on the stack
 
-		_, alreadyExpanded := ri.expandedParents[elem]
-
-		// If this node has children and not expanded, we must expand now.
-		// Reverse order: we want largest children first.
-		if len(elem.children) > 0 && !alreadyExpanded {
-			ri.expandedParents[elem] = struct{}{}
-
-			// Push children as a slice. For reverse iteration, the largest child
-			// should be visited first, so we rely on popping from the end.
-			// Because we pop from the end, the last child in `elem.children` is the largest.
-			// No need to reverse here if we assume children are in ascending order.
-			ri.i.stack = append(ri.i.stack, elem.children)
-
-			// Also push `elem` back so after children, we consider its leaf.
-			ri.i.stack = append(ri.i.stack, []*Node[T]{elem})
-			// Continue to process after expansion.
-			// We don't remove `elem` now since we re-added it after children.
-			// Next iteration will handle the children and then come back to elem.
-			ri.i.stack = ri.i.stack[:n] // Remove the original slice from the stack end
-			continue
-		}
-
-		// Remove the node from the current slice.
+		// Pop this node from the top slice
 		if m > 1 {
-			ri.i.stack[n-1] = last[:m-1]
+			ri.i.stack[n-1] = top[:m-1]
 		} else {
 			ri.i.stack = ri.i.stack[:n-1]
 		}
 
+		_, alreadyExpanded := ri.expandedParents[elem]
+
+		// If this node has children and isn't expanded, expand now.
+		if len(elem.children) > 0 && !alreadyExpanded {
+			ri.expandedParents[elem] = struct{}{}
+
+			// For reverse order, we want to visit the largest child first.
+			// By default, children are in ascending order. We rely on popping last element first,
+			// so we can append children as is. The last child in children is largest.
+			ri.i.stack = append(ri.i.stack, elem.children)
+
+			// After processing children, we want to revisit this node (elem).
+			// Push it back as a single-node slice, so its leaf is considered after its children.
+			ri.i.stack = append(ri.i.stack, []*Node[T]{elem})
+			continue
+		}
+
+		// If already expanded or no children, we've fully popped elem now.
 		if alreadyExpanded {
 			delete(ri.expandedParents, elem)
 		}
 
-		// If this node has a leaf, return it.
+		// If elem has a leaf, return it
 		if elem.leaf != nil {
 			return elem.leaf.key, elem.leaf.val, true
 		}
-		// Otherwise, continue until we find a leaf.
+		// If no leaf, continue
 	}
 
 	return nil, zero, false
