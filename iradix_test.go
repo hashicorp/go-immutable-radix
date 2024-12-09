@@ -1365,7 +1365,7 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 	// Commit and make sure we overflowed but didn't take on extra stuff.
 	r = txn.CommitOnly()
 	if !txn.trackOverflow || txn.trackChannels != nil {
-		//t.Fatalf("bad")
+		t.Fatalf("bad")
 	}
 
 	// Now do the trigger.
