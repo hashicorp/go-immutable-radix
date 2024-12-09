@@ -22,8 +22,8 @@ type rawIterator[T any] struct {
 	path string
 }
 
-// rawStackEntry is used to keep track of the cumulative path as well as
-// its associated nodes in the frontier.
+// rawStackEntry is used to keep track of the cumulative common path as well as
+// its associated edges in the frontier.
 type rawStackEntry[T any] struct {
 	path  string
 	nodes []*Node[T]

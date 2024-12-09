@@ -13,7 +13,8 @@ type Iterator[T any] struct {
 	stack [][]*Node[T]
 }
 
-// SeekPrefixWatch seeks the iterator to a given prefix and returns the watch channel.
+// SeekPrefixWatch is used to seek the iterator to a given prefix
+// and returns the watch channel of the finest granularity
 func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	// Wipe the stack
 	i.stack = nil
@@ -78,10 +79,23 @@ func (i *Iterator[T]) recurseMin(n *Node[T]) *Node[T] {
 	return nil
 }
 
-// SeekLowerBound sets the iterator to the smallest key >= 'key'.
+// SeekLowerBound is used to seek the iterator to the smallest key that is
+// greater or equal to the given key. There is no watch variant as it's hard to
+// predict based on the radix structure which node(s) changes might affect the
+// result.
 func (i *Iterator[T]) SeekLowerBound(key []byte) {
-	// Wipe the stack.
+	// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
+	// go because we need only a subset of edges of many nodes in the path to the
+	// leaf with the lower bound. Note that the iterator will still recurse into
+	// children that we don't traverse on the way to the reverse lower bound as it
+	// walks the stack.
 	i.stack = nil
+	// i.node starts off in the common case as pointing to the root node of the
+	// tree. By the time we return we have either found a lower bound and setup
+	// the stack to traverse all larger keys, or we have not and the stack and
+	// node should both be nil to prevent the iterator from assuming it is just
+	// iterating the whole tree from the root node. Either way this needs to end
+	// up as nil so just set it here.
 	n := i.node
 	i.node = nil
 	search := key
@@ -98,6 +112,7 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	}
 
 	for {
+		// Compare current prefix with the search key's same-length prefix.
 		var prefixCmp int
 		if len(n.prefix) < len(search) {
 			prefixCmp = bytes.Compare(n.prefix, search[:len(n.prefix)])
@@ -106,27 +121,39 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		}
 
 		if prefixCmp > 0 {
-			// Current prefix > search: all keys in this subtree are >= search
+			// Prefix is larger, that means the lower bound is greater than the search
+			// and from now on we need to follow the minimum path to the smallest
+			// leaf under this subtree.
 			findMin(n)
 			return
 		}
 
 		if prefixCmp < 0 {
 			// Current prefix < search: no lower bound in this subtree
+			// Prefix is smaller than search prefix, that means there is no lower
+			// bound
+			i.node = nil
 			return
 		}
 
-		// prefixCmp == 0
+		// Prefix is equal, we are still heading for an exact match. If this is a
+		// leaf and an exact match we're done.
 		if n.leaf != nil && bytes.Equal(n.leaf.key, key) {
 			// Exact match
 			found(n)
 			return
 		}
 
+		// Consume the search prefix if the current node has one. Note that this is
+		// safe because if n.prefix is longer than the search slice prefixCmp would
+		// have been > 0 above and the method would have already returned.
 		search = search[len(n.prefix):]
 
 		if len(search) == 0 {
-			// Matched the prefix fully, all edges are >= key
+			// We've exhausted the search key, but the current node is not an exact
+			// match or not a leaf. That means that the leaf value if it exists, and
+			// all child nodes must be strictly greater, the smallest key in this
+			// subtree must be the lower bound.
 			findMin(n)
 			return
 		}
@@ -174,7 +201,7 @@ func (i *Iterator[T]) Next() ([]byte, T, bool) {
 			i.stack = append(i.stack, elem.edges)
 		}
 
-		// If this node has a leaf, return it.
+		// Return the leaf values if any
 		if elem.leaf != nil {
 			return elem.leaf.key, elem.leaf.val, true
 		}

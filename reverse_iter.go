@@ -7,11 +7,19 @@ import (
 	"bytes"
 )
 
-// ReverseIterator is used to iterate over a set of nodes in reverse in-order.
+// ReverseIterator is used to iterate over a set of nodes
+// in reverse in-order
 type ReverseIterator[T any] struct {
 	i *Iterator[T]
 
-	// expandedParents keeps track of nodes whose edges have been pushed.
+	// expandedParents stores the set of parent nodes whose relevant children have
+	// already been pushed into the stack. This can happen during seek or during
+	// iteration.
+	//
+	// Unlike forward iteration we need to recurse into children before we can
+	// output the value stored in an internal leaf since all children are greater.
+	// We use this to track whether we have already ensured all the children are
+	// in the stack.
 	expandedParents map[*Node[T]]struct{}
 }
 
@@ -22,19 +30,34 @@ func NewReverseIterator[T any](n *Node[T]) *ReverseIterator[T] {
 	}
 }
 
-// SeekPrefixWatch seeks the iterator to a given prefix and returns the watch channel.
+// SeekPrefixWatch is used to seek the iterator to a given prefix
+// and returns the watch channel of the finest granularity
 func (ri *ReverseIterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	return ri.i.SeekPrefixWatch(prefix)
 }
 
-// SeekPrefix seeks the iterator to a given prefix.
+// SeekPrefix is used to seek the iterator to a given prefix
 func (ri *ReverseIterator[T]) SeekPrefix(prefix []byte) {
 	ri.i.SeekPrefixWatch(prefix)
 }
 
-// SeekReverseLowerBound sets the iterator to the largest key <= 'key'.
+// SeekReverseLowerBound is used to seek the iterator to the largest key that is
+// lower or equal to the given key. There is no watch variant as it's hard to
+// predict based on the radix structure which node(s) changes might affect the
+// result.
 func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
+	// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
+	// go because we need only a subset of edges of many nodes in the path to the
+	// leaf with the lower bound. Note that the iterator will still recurse into
+	// children that we don't traverse on the way to the reverse lower bound as it
+	// walks the stack.
 	ri.i.stack = nil
+	// ri.i.node starts off in the common case as pointing to the root node of the
+	// tree. By the time we return we have either found a lower bound and setup
+	// the stack to traverse all larger keys, or we have not and the stack and
+	// node should both be nil to prevent the iterator from assuming it is just
+	// iterating the whole tree from the root node. Either way this needs to end
+	// up as nil so just set it here.
 	n := ri.i.node
 	ri.i.node = nil
 	search := key
@@ -45,11 +68,17 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 
 	// found adds a single node as a slice and marks it as expanded
 	found := func(n *Node[T]) {
+		// We need to mark this node as expanded in advance too otherwise the
+		// iterator will attempt to walk all of its children even though they are
+		// greater than the lower bound we have found. We've expanded it in the
+		// sense that all of its children that we want to walk are already in the
+		// stack (i.e. none of them).
 		ri.i.stack = append(ri.i.stack, []*Node[T]{n})
 		ri.expandedParents[n] = struct{}{}
 	}
 
 	for {
+		// Compare current prefix with the search key's same-length prefix.
 		var prefixCmp int
 		if len(n.prefix) < len(search) {
 			prefixCmp = bytes.Compare(n.prefix, search[:len(n.prefix)])
@@ -58,56 +87,94 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 		}
 
 		if prefixCmp < 0 {
-			// n.prefix < search => reverse lower bound is under this subtree.
-			// Push this node; the reverse iteration (Previous) will descend into it.
+			// Prefix is smaller than search prefix, that means there is no exact
+			// match for the search key. But we are looking in reverse, so the reverse
+			// lower bound will be the largest leaf under this subtree, since it is
+			// the value that would come right before the current search key if it
+			// were in the tree. So we need to follow the maximum path in this subtree
+			// to find it. Note that this is exactly what the iterator will already do
+			// if it finds a node in the stack that has _not_ been marked as expanded
+			// so in this one case we don't call `found` and instead let the iterator
+			// do the expansion and recursion through all the children.
 			ri.i.stack = append(ri.i.stack, []*Node[T]{n})
 			return
 		}
 
 		if prefixCmp > 0 {
-			// n.prefix > search => no reverse lower bound here.
+			// Prefix is larger than search prefix, or there is no prefix but we've
+			// also exhausted the search key. Either way, that means there is no
+			// reverse lower bound since nothing comes before our current search
+			// prefix.
 			return
 		}
 
-		// prefixCmp == 0
+		// If this is a leaf, something needs to happen! Note that if it's a leaf
+		// and prefixCmp was zero (which it must be to get here) then the leaf value
+		// is either an exact match for the search, or it's lower. It can't be
+		// greater.
 		if n.isLeaf() {
+
+			// Firstly, if it's an exact match, we're done!
 			if bytes.Equal(n.leaf.key, key) {
 				// Exact match
 				found(n)
 				return
 			}
 
-			// Leaf < key (since not equal). If no edges, this leaf is the lower bound.
+			// It's not so this node's leaf value must be lower and could still be a
+			// valid contender for reverse lower bound.
+
+			// If it has no children then we are also done.
 			if len(n.edges) == 0 {
 				found(n)
 				return
 			}
 
-			// Leaf with edges. Push node first, mark expanded.
+			// Finally, this leaf is internal (has children) so we'll keep searching,
+			// but we need to add it to the iterator's stack since it has a leaf value
+			// that needs to be iterated over. It needs to be added to the stack
+			// before its children below as it comes first.
 			ri.i.stack = append(ri.i.stack, []*Node[T]{n})
+			// We also need to mark it as expanded since we'll be adding any of its
+			// relevant children below and so don't want the iterator to re-add them
+			// on its way back up the stack.
+
 			ri.expandedParents[n] = struct{}{}
 		}
 
-		// Consume matched prefix
+		// Consume the search prefix. Note that this is safe because if n.prefix is
+		// longer than the search slice prefixCmp would have been > 0 above and the
+		// method would have already returned.
 		search = search[len(n.prefix):]
 
 		if len(search) == 0 {
-			// Exhausted search key, not at a leaf, all edges > search => no lower bound here.
+			// We've exhausted the search key but we are not at a leaf. That means all
+			// children are greater than the search key so a reverse lower bound
+			// doesn't exist in this subtree. Note that there might still be one in
+			// the whole radix tree by following a different path somewhere further
+			// up. If that's the case then the iterator's stack will contain all the
+			// smaller nodes already and Previous will walk through them correctly.
 			return
 		}
 
 		idx, lbNode := n.getLowerBoundEdge(search[0])
+		// From here, we need to update the stack with all values lower than
+		// the lower bound edge. Since getLowerBoundEdge() returns -1 when the
+		// search prefix is larger than all edges, we need to place idx at the
+		// last edge index so they can all be place in the stack, since they
+		// come before our search prefix.
 		if idx == -1 {
 			idx = len(n.edges)
 		}
 
-		// Children before idx are strictly lower than search
+		// Create stack edges for the all strictly lower edges in this node.
 		if idx > 0 {
 			ri.i.stack = append(ri.i.stack, n.edges[:idx])
 		}
 
+		// Exit if there's no lower bound edge. The stack will have the previous
+		// nodes already.
 		if lbNode == nil {
-			// No lower bound child
 			return
 		}
 
@@ -128,7 +195,7 @@ func (ri *ReverseIterator[T]) Previous() ([]byte, T, bool) {
 	}
 
 	for len(ri.i.stack) > 0 {
-		// Get the top slice of nodes
+		// Inspect the last element of the stack
 		n := len(ri.i.stack)
 		top := ri.i.stack[n-1]
 		m := len(top)
@@ -143,7 +210,9 @@ func (ri *ReverseIterator[T]) Previous() ([]byte, T, bool) {
 
 		_, alreadyExpanded := ri.expandedParents[elem]
 
-		// If this node has edges and isn't expanded, expand now.
+		// If this is an internal node and we've not seen it already, we need to
+		// leave it in the stack so we can return its possible leaf value _after_
+		// we've recursed through all its children.
 		if len(elem.edges) > 0 && !alreadyExpanded {
 			ri.expandedParents[elem] = struct{}{}
 

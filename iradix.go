@@ -231,8 +231,8 @@ func (t *Txn[T]) trackChannelsAndCount(n *Node[T]) int {
 		t.trackChannel(n.leaf.mutateCh)
 	}
 
-	for _, child := range n.edges {
-		leaves += t.trackChannelsAndCount(child)
+	for _, e := range n.edges {
+		leaves += t.trackChannelsAndCount(e)
 	}
 	return leaves
 }
@@ -444,6 +444,8 @@ func (t *Txn[T]) deletePrefix(n *Node[T], search []byte) (*Node[T], int) {
 	// so be careful if you change any of the logic here.
 
 	nc := t.writeNode(n, false)
+
+	// Delete the edge if the node has no edges
 	if newChild.leaf == nil && len(newChild.edges) == 0 {
 		nc.delEdge(label)
 		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() {
