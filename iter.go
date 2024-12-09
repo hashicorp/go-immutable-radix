@@ -62,16 +62,16 @@ func (i *Iterator[T]) recurseMin(n *Node[T]) *Node[T] {
 	if n.leaf != nil {
 		return n
 	}
-	nChildren := len(n.children)
+	nChildren := len(n.edges)
 	if nChildren > 1 {
 		// Add all but the first child to the stack.
 		// The first child is the minimum; we recurse into it.
-		i.stack = append(i.stack, n.children[1:])
+		i.stack = append(i.stack, n.edges[1:])
 	}
 	if nChildren > 0 {
-		return i.recurseMin(n.children[0])
+		return i.recurseMin(n.edges[0])
 	}
-	// No children means no minimum node
+	// No edges means no minimum node
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		search = search[len(n.prefix):]
 
 		if len(search) == 0 {
-			// Matched the prefix fully, all children are >= key
+			// Matched the prefix fully, all edges are >= key
 			findMin(n)
 			return
 		}
@@ -136,8 +136,8 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		}
 
 		// Children after lbNode are strictly greater
-		if idx+1 < len(n.children) {
-			i.stack = append(i.stack, n.children[idx+1:])
+		if idx+1 < len(n.edges) {
+			i.stack = append(i.stack, n.edges[idx+1:])
 		}
 
 		n = lbNode
@@ -165,10 +165,10 @@ func (i *Iterator[T]) Next() ([]byte, T, bool) {
 			i.stack = i.stack[:n-1]
 		}
 
-		// Pre-order: node first, then children.
-		// If the node has children, push them as a new slice to the stack.
-		if len(elem.children) > 0 {
-			i.stack = append(i.stack, elem.children)
+		// Pre-order: node first, then edges.
+		// If the node has edges, push them as a new slice to the stack.
+		if len(elem.edges) > 0 {
+			i.stack = append(i.stack, elem.edges)
 		}
 
 		// If this node has a leaf, return it.

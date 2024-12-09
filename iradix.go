@@ -203,9 +203,9 @@ func (t *Txn[T]) writeNode(n *Node[T], forLeafUpdate bool) *Node[T] {
 		nc.prefix = make([]byte, len(n.prefix))
 		copy(nc.prefix, n.prefix)
 	}
-	if len(n.children) != 0 {
-		nc.children = make([]*Node[T], len(n.children))
-		copy(nc.children, n.children)
+	if len(n.edges) != 0 {
+		nc.edges = make([]*Node[T], len(n.edges))
+		copy(nc.edges, n.edges)
 		nc.bitmap = n.bitmap
 	}
 
@@ -231,7 +231,7 @@ func (t *Txn[T]) trackChannelsAndCount(n *Node[T]) int {
 		t.trackChannel(n.leaf.mutateCh)
 	}
 
-	for _, child := range n.children {
+	for _, child := range n.edges {
 		leaves += t.trackChannelsAndCount(child)
 	}
 	return leaves
@@ -243,7 +243,7 @@ func (t *Txn[T]) mergeChild(n *Node[T]) {
 	// Mark the child node as being mutated since we are about to abandon
 	// it. We don't need to mark the leaf since we are retaining it if it
 	// is there.
-	child := n.children[0]
+	child := n.edges[0]
 	if t.trackMutate {
 		t.trackChannel(child.mutateCh)
 	}
@@ -251,11 +251,11 @@ func (t *Txn[T]) mergeChild(n *Node[T]) {
 	// Merge the nodes.
 	n.prefix = concat(n.prefix, child.prefix)
 	n.leaf = child.leaf
-	if len(child.children) != 0 {
-		n.children = make([]*Node[T], len(child.children))
-		copy(n.children, child.children)
+	if len(child.edges) != 0 {
+		n.edges = make([]*Node[T], len(child.edges))
+		copy(n.edges, child.edges)
 	} else {
-		n.children = nil
+		n.edges = nil
 	}
 	n.bitmap = child.bitmap
 }
@@ -310,7 +310,7 @@ func (t *Txn[T]) insert(n *Node[T], k, search []byte, v T) (*Node[T], T, bool) {
 		if newChild != nil {
 			nc := t.writeNode(n, false)
 			rank := nc.getChildRank(label)
-			nc.children[rank] = newChild
+			nc.edges[rank] = newChild
 			return nc, oldVal, didUpdate
 		}
 		return nil, oldVal, didUpdate
@@ -366,7 +366,7 @@ func (t *Txn[T]) delete(n *Node[T], search []byte) (*Node[T], *leafNode[T]) {
 		nc.leaf = nil
 
 		// Check if this node should be merged
-		if n != t.root && len(nc.children) == 1 {
+		if n != t.root && len(nc.edges) == 1 {
 			t.mergeChild(nc)
 		}
 		return nc, oldLeaf
@@ -391,15 +391,15 @@ func (t *Txn[T]) delete(n *Node[T], search []byte) (*Node[T], *leafNode[T]) {
 	// the !nc.isLeaf() check in the logic just below. This is pretty subtle,
 	// so be careful if you change any of the logic here.
 	nc := t.writeNode(n, false)
-	if newChild.leaf == nil && len(newChild.children) == 0 {
+	if newChild.leaf == nil && len(newChild.edges) == 0 {
 		nc.delEdge(label)
-		if n != t.root && len(nc.children) == 1 && !nc.isLeaf() {
+		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() {
 			t.mergeChild(nc)
 		}
 	} else {
 		// Replace child
 		rank := nc.getChildRank(label)
-		nc.children[rank] = newChild
+		nc.edges[rank] = newChild
 	}
 	return nc, leaf
 }
@@ -413,7 +413,7 @@ func (t *Txn[T]) deletePrefix(n *Node[T], search []byte) (*Node[T], int) {
 			nc.leaf = nil
 		}
 		count := t.trackChannelsAndCount(n)
-		nc.children = nil
+		nc.edges = nil
 		var empty [4]uint64
 		nc.bitmap = empty
 		return nc, count
@@ -444,14 +444,14 @@ func (t *Txn[T]) deletePrefix(n *Node[T], search []byte) (*Node[T], int) {
 	// so be careful if you change any of the logic here.
 
 	nc := t.writeNode(n, false)
-	if newChild.leaf == nil && len(newChild.children) == 0 {
+	if newChild.leaf == nil && len(newChild.edges) == 0 {
 		nc.delEdge(label)
-		if n != t.root && len(nc.children) == 1 && !nc.isLeaf() {
+		if n != t.root && len(nc.edges) == 1 && !nc.isLeaf() {
 			t.mergeChild(nc)
 		}
 	} else {
 		rank := nc.getChildRank(label)
-		nc.children[rank] = newChild
+		nc.edges[rank] = newChild
 	}
 	return nc, numDeletions
 }

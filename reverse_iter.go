@@ -8,7 +8,7 @@ import (
 type ReverseIterator[T any] struct {
 	i *Iterator[T]
 
-	// expandedParents keeps track of nodes whose children have been pushed.
+	// expandedParents keeps track of nodes whose edges have been pushed.
 	expandedParents map[*Node[T]]struct{}
 }
 
@@ -74,13 +74,13 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 				return
 			}
 
-			// Leaf < key (since not equal). If no children, this leaf is the lower bound.
-			if len(n.children) == 0 {
+			// Leaf < key (since not equal). If no edges, this leaf is the lower bound.
+			if len(n.edges) == 0 {
 				found(n)
 				return
 			}
 
-			// Leaf with children. Push node first, mark expanded.
+			// Leaf with edges. Push node first, mark expanded.
 			ri.i.stack = append(ri.i.stack, []*Node[T]{n})
 			ri.expandedParents[n] = struct{}{}
 		}
@@ -89,18 +89,18 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 		search = search[len(n.prefix):]
 
 		if len(search) == 0 {
-			// Exhausted search key, not at a leaf, all children > search => no lower bound here.
+			// Exhausted search key, not at a leaf, all edges > search => no lower bound here.
 			return
 		}
 
 		idx, lbNode := n.getLowerBoundEdge(search[0])
 		if idx == -1 {
-			idx = len(n.children)
+			idx = len(n.edges)
 		}
 
 		// Children before idx are strictly lower than search
 		if idx > 0 {
-			ri.i.stack = append(ri.i.stack, n.children[:idx])
+			ri.i.stack = append(ri.i.stack, n.edges[:idx])
 		}
 
 		if lbNode == nil {
@@ -140,23 +140,23 @@ func (ri *ReverseIterator[T]) Previous() ([]byte, T, bool) {
 
 		_, alreadyExpanded := ri.expandedParents[elem]
 
-		// If this node has children and isn't expanded, expand now.
-		if len(elem.children) > 0 && !alreadyExpanded {
+		// If this node has edges and isn't expanded, expand now.
+		if len(elem.edges) > 0 && !alreadyExpanded {
 			ri.expandedParents[elem] = struct{}{}
 
-			// After processing children, we want to revisit this node (elem).
-			// Push it back as a single-node slice, so its leaf is considered after its children.
+			// After processing edges, we want to revisit this node (elem).
+			// Push it back as a single-node slice, so its leaf is considered after its edges.
 			ri.i.stack = append(ri.i.stack, []*Node[T]{elem})
-		
+
 			// For reverse order, we want to visit the largest child first.
-			// By default, children are in ascending order. We rely on popping last element first,
-			// so we can append children as is. The last child in children is largest.
-			ri.i.stack = append(ri.i.stack, elem.children)
+			// By default, edges are in ascending order. We rely on popping last element first,
+			// so we can append edges as is. The last child in edges is largest.
+			ri.i.stack = append(ri.i.stack, elem.edges)
 
 			continue
 		}
 
-		// If already expanded or no children, we've fully popped elem now.
+		// If already expanded or no edges, we've fully popped elem now.
 		if alreadyExpanded {
 			delete(ri.expandedParents, elem)
 		}

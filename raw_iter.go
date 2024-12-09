@@ -67,11 +67,11 @@ func (i *rawIterator[T]) Next() {
 		// Compute the new path
 		newPath := last.path + string(elem.prefix)
 
-		// Push the children onto the frontier if any
-		if len(elem.children) > 0 {
+		// Push the edges onto the frontier if any
+		if len(elem.edges) > 0 {
 			i.stack = append(i.stack, rawStackEntry[T]{
 				path:  newPath,
-				nodes: elem.children,
+				nodes: elem.edges,
 			})
 		}
 
