@@ -5,7 +5,6 @@ package iradix
 
 import (
 	"bytes"
-	"math/bits"
 	"strings"
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
@@ -21,18 +20,6 @@ const (
 	// also be bounded in a similar way.
 	defaultModifiedCache = 8192
 )
-
-// bitsOnesCount64 is a helper to count set bits in a uint64.
-// We can use math/bits.OnesCount64 directly if allowed.
-func bitsOnesCount64(x uint64) int {
-	return bits.OnesCount64(x)
-}
-
-// trailingZeros64 finds the index of the first set bit (LSB) in x.
-// We can use bits.TrailingZeros64 directly if allowed.
-func trailingZeros64(x uint64) int {
-	return bits.TrailingZeros64(x)
-}
 
 // Tree implements an immutable radix tree. This can be treated as a
 // Dictionary abstract data type. The main advantage over a standard
@@ -209,6 +196,7 @@ func (t *Txn[T]) writeNode(n *Node[T], forLeafUpdate bool) *Node[T] {
 		nc.bitmap = n.bitmap
 	}
 
+	// Mark this node as writable.
 	t.writable.Add(nc, nil)
 	return nc
 }
