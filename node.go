@@ -40,30 +40,8 @@ type Node[T any] struct {
 	// bitmap represents which edges exist.
 	// There are 256 possible edges (one per byte),
 	// so we use 4 uint64s for 256 bits total.
-	bitmap [4]uint64
+	bitmap edgeBitMap
 	edges  []*Node[T]
-}
-
-// setBit sets the bit for a given label
-func setBit(bitmap *[4]uint64, label byte) {
-	block := label >> 6
-	bitPos := label & 63
-	bitmap[block] |= 1 << bitPos
-}
-
-// clearBit clears the bit for a given label
-func clearBit(bitmap *[4]uint64, label byte) {
-	block := label >> 6
-	bitPos := label & 63
-	mask := uint64(1) << bitPos
-	bitmap[block] &^= mask
-}
-
-// bitSet checks if bit for label is set
-func bitSet(bitmap [4]uint64, label byte) bool {
-	block := label >> 6
-	bitPos := label & 63
-	return (bitmap[block] & (1 << bitPos)) != 0
 }
 
 // rankOf computes how many bits are set before foundLabel
@@ -118,11 +96,11 @@ func (n *Node[T]) addEdge(label byte, child *Node[T]) {
 		copy(n.edges[idx+1:], n.edges[idx:len(n.edges)-1])
 		n.edges[idx] = child
 	}
-	setBit(&n.bitmap, label)
+	n.bitmap.setBit(label)
 }
 
 func (n *Node[T]) replaceEdge(label byte, child *Node[T]) {
-	if !bitSet(n.bitmap, label) {
+	if !n.bitmap.hasBitSet(label) {
 		panic("replacing missing edge")
 	}
 
@@ -171,7 +149,7 @@ func (n *Node[T]) getLowerBoundEdge(label byte) (int, *Node[T]) {
 }
 
 func (n *Node[T]) getEdge(label byte) (int, *Node[T]) {
-	if !bitSet(n.bitmap, label) {
+	if !(n.bitmap.hasBitSet(label)) {
 		return -1, nil
 	}
 	rank := n.getChildRank(label)
@@ -182,14 +160,14 @@ func (n *Node[T]) isLeaf() bool {
 }
 
 func (n *Node[T]) delEdge(label byte) {
-	if !bitSet(n.bitmap, label) {
+	if !n.bitmap.hasBitSet(label) {
 		return
 	}
 	rank := n.getChildRank(label)
 	copy(n.edges[rank:], n.edges[rank+1:])
 	n.edges[len(n.edges)-1] = nil
 	n.edges = n.edges[:len(n.edges)-1]
-	clearBit(&n.bitmap, label)
+	n.bitmap.clearBit(label)
 }
 
 func (n *Node[T]) GetWatch(k []byte) (<-chan struct{}, T, bool) {
