@@ -20,8 +20,8 @@ const (
 
 // Record is a key-value pair that can be inserted into the tree
 type Record struct {
-	key   []byte
-	value interface{}
+	Key   []byte
+	Value interface{}
 }
 
 // Tree implements an immutable radix tree. This can be treated as a
@@ -97,7 +97,7 @@ type Txn struct {
 // initializeWithData is used to initialize the tree with the given data.
 func (t *Txn) initializeWithData(data []*Record) {
 	for _, record := range data {
-		t.Insert(record.key, record.value)
+		t.Insert(record.Key, record.Value)
 	}
 }
 

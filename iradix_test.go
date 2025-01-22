@@ -1881,14 +1881,14 @@ func TestNewWithData(t *testing.T) {
 
 	records := make([]*Record, 0)
 	for ind, _ := range keys {
-		records = append(records, &Record{key: []byte(keys[ind]), value: ind})
+		records = append(records, &Record{Key: []byte(keys[ind]), Value: ind})
 	}
-	r := NewWithData[any](records)
+	r := NewWithData(records)
 	if r.Len() != len(keys) {
 		t.Fatalf("bad len: %v - expected %v", r.Len(), len(keys))
 	}
 	for indx, _ := range records {
-		if val, ok := r.Get(records[indx].key); !ok && val != records[indx].value {
+		if val, ok := r.Get(records[indx].Key); !ok && val != records[indx].Value {
 			t.Fatalf("incorect value")
 		}
 	}
