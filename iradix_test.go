@@ -1879,9 +1879,9 @@ func TestNewWithData(t *testing.T) {
 		"zipzap",
 	}
 
-	records := make([]*Record[any], 0)
+	records := make([]*Record, 0)
 	for ind, _ := range keys {
-		records = append(records, &Record[any]{key: []byte(keys[ind]), value: ind})
+		records = append(records, &Record{key: []byte(keys[ind]), value: ind})
 	}
 	r := NewWithData[any](records)
 	if r.Len() != len(keys) {

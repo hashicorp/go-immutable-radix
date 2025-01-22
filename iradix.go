@@ -19,9 +19,9 @@ const (
 )
 
 // Record is a key-value pair that can be inserted into the tree
-type Record[T any] struct {
+type Record struct {
 	key   []byte
-	value T
+	value interface{}
 }
 
 // Tree implements an immutable radix tree. This can be treated as a
@@ -45,12 +45,12 @@ func New() *Tree {
 }
 
 // NewWithData return a new Tree initialized with the given slice of Record
-func NewWithData[T any](data []*Record[T]) *Tree[T] {
-	t := New[T]()
+func NewWithData[T any](data []*Record) *Tree {
+	t := New()
 	return t.initializeWithData(data)
 }
 
-func (t *Tree[T]) initializeWithData(data []*Record[T]) *Tree[T] {
+func (t *Tree) initializeWithData(data []*Record) *Tree {
 	txn := t.Txn()
 	txn.initializeWithData(data)
 	return txn.Commit()
@@ -95,7 +95,7 @@ type Txn struct {
 }
 
 // initializeWithData is used to initialize the tree with the given data.
-func (t *Txn[T]) initializeWithData(data []*Record[T]) {
+func (t *Txn) initializeWithData(data []*Record) {
 	for _, record := range data {
 		t.Insert(record.key, record.value)
 	}
