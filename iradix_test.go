@@ -1869,3 +1869,27 @@ func TestClone(t *testing.T) {
 		t.Fatalf("bad baz in t2")
 	}
 }
+
+func TestNewWithData(t *testing.T) {
+	keys := []string{
+		"foobar",
+		"foo/bar/baz",
+		"foo/baz/bar",
+		"foo/zip/zap",
+		"zipzap",
+	}
+
+	records := make([]*Record[any], 0)
+	for ind, _ := range keys {
+		records = append(records, &Record[any]{key: []byte(keys[ind]), value: ind})
+	}
+	r := NewWithData[any](records)
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v - expected %v", r.Len(), len(keys))
+	}
+	for indx, _ := range records {
+		if val, ok := r.Get(records[indx].key); !ok && val != records[indx].value {
+			t.Fatalf("incorect value")
+		}
+	}
+}
