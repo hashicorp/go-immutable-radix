@@ -45,7 +45,7 @@ func New() *Tree {
 }
 
 // NewWithData return a new Tree initialized with the given slice of Record
-func NewWithData[T any](data []*Record) *Tree {
+func NewWithData(data []*Record) *Tree {
 	t := New()
 	return t.initializeWithData(data)
 }
