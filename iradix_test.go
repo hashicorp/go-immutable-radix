@@ -181,7 +181,7 @@ func TestRoot(t *testing.T) {
 	if !ok || val != true {
 		t.Fatalf("bad: %#v", val)
 	}
-	r, val, ok = r.Delete(nil)
+	_, val, ok = r.Delete(nil)
 	if !ok || val != true {
 		t.Fatalf("bad: %v", val)
 	}
@@ -1009,12 +1009,12 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 			t.Fatalf("bad len: %v %v", r.Len(), len(keys))
 		}
 
-		rootWatch, _, ok := r.Root().GetWatch(nil)
+		rootWatch, _, _ := r.Root().GetWatch(nil)
 		if rootWatch == nil {
 			t.Fatalf("bad")
 		}
 
-		parentWatch, _, ok := r.Root().GetWatch([]byte("foo"))
+		parentWatch, _, _ := r.Root().GetWatch([]byte("foo"))
 		if parentWatch == nil {
 			t.Fatalf("bad")
 		}
@@ -1027,7 +1027,7 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 			t.Fatalf("bad")
 		}
 
-		otherWatch, _, ok := r.Root().GetWatch([]byte("foo/b"))
+		otherWatch, _, _ := r.Root().GetWatch([]byte("foo/b"))
 		if otherWatch == nil {
 			t.Fatalf("bad")
 		}
@@ -1073,12 +1073,12 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Setup new watchers
-		rootWatch, _, ok = r.Root().GetWatch(nil)
+		rootWatch, _, _ = r.Root().GetWatch(nil)
 		if rootWatch == nil {
 			t.Fatalf("bad")
 		}
 
-		parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
+		parentWatch, _, _ = r.Root().GetWatch([]byte("foo"))
 		if parentWatch == nil {
 			t.Fatalf("bad")
 		}
@@ -1123,12 +1123,12 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Setup all the watchers again
-		rootWatch, _, ok = r.Root().GetWatch(nil)
+		rootWatch, _, _ = r.Root().GetWatch(nil)
 		if rootWatch == nil {
 			t.Fatalf("bad")
 		}
 
-		parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
+		parentWatch, _, _ = r.Root().GetWatch([]byte("foo"))
 		if parentWatch == nil {
 			t.Fatalf("bad")
 		}
@@ -1182,12 +1182,12 @@ func TestTrackMutate_GetWatch(t *testing.T) {
 		}
 
 		// Setup new watchers
-		rootWatch, _, ok = r.Root().GetWatch(nil)
+		rootWatch, _, _ = r.Root().GetWatch(nil)
 		if rootWatch == nil {
 			t.Fatalf("bad")
 		}
 
-		parentWatch, _, ok = r.Root().GetWatch([]byte("foo"))
+		parentWatch, _, _ = r.Root().GetWatch([]byte("foo"))
 		if parentWatch == nil {
 			t.Fatalf("bad")
 		}
@@ -1258,12 +1258,12 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
 	}
 
-	rootWatch, _, ok := r.Root().GetWatch(nil)
+	rootWatch, _, _ := r.Root().GetWatch(nil)
 	if rootWatch == nil {
 		t.Fatalf("bad")
 	}
 
-	parentWatch, _, ok := r.Root().GetWatch([]byte("foo"))
+	parentWatch, _, _ := r.Root().GetWatch([]byte("foo"))
 	if parentWatch == nil {
 		t.Fatalf("bad")
 	}
@@ -1284,12 +1284,12 @@ func TestTrackMutate_HugeTxn(t *testing.T) {
 		t.Fatalf("bad")
 	}
 
-	beforeWatch, _, ok := r.Root().GetWatch([]byte("aaa123"))
+	beforeWatch, _, _ := r.Root().GetWatch([]byte("aaa123"))
 	if beforeWatch == nil {
 		t.Fatalf("bad")
 	}
 
-	afterWatch, _, ok := r.Root().GetWatch([]byte("zzz123"))
+	afterWatch, _, _ := r.Root().GetWatch([]byte("zzz123"))
 	if afterWatch == nil {
 		t.Fatalf("bad")
 	}

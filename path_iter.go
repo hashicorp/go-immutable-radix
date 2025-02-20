@@ -11,7 +11,6 @@ import "bytes"
 type PathIterator[T any] struct {
 	node *Node[T]
 	path []byte
-	done bool
 }
 
 // Next returns the next node in order

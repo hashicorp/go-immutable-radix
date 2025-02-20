@@ -10,6 +10,8 @@ jobs:
       - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version: ${{env.GO_VERSION}}
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@08e2f20817b15149a52b5b3ebe7de50aff2ba8c5
       - name: Run Go Vet
         run: |
           go vet ./...
@@ -21,6 +23,15 @@ jobs:
             echo "$files"
             exit 1
           fi
-      - name: Run Go Test
+      - name: Run Go Test and generate coverage report
         run: |
-          go test -race -v ./...
+          go test -race -v ./... -coverprofile=coverage.out
+      - name: Upload coverage report
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+         path: coverage.out
+         name: Coverage-report
+      - name: Display coverage report 
+        run: go tool cover -func=coverage.out
+      - name: Build Go
+        run: go build ./...
