@@ -27,11 +27,11 @@ jobs:
         run: |
           go test -race -v ./... -coverprofile=coverage.out
       - name: Upload coverage report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-         path: coverage.out
-         name: Coverage-report
-      - name: Display coverage report 
+          path: coverage.out
+          name: Coverage-report
+      - name: Display coverage report
         run: go tool cover -func=coverage.out
       - name: Build Go
         run: go build ./...
