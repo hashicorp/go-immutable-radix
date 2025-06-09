@@ -7,11 +7,10 @@ import (
 	"bytes"
 )
 
-// Iterator is used to iterate over a set of nodes
-// in pre-order
+// Iterator is used to iterate over a set of nodes in pre-order
 type Iterator[T any] struct {
 	node  *Node[T]
-	stack []edges[T]
+	stack [][]*Node[T]
 }
 
 // SeekPrefixWatch is used to seek the iterator to a given prefix
@@ -29,14 +28,15 @@ func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 			return
 		}
 
-		// Look for an edge
-		_, n = n.getEdge(search[0])
-		if n == nil {
+		// Look for a child
+		_, child := n.getEdge(search[0])
+		if child == nil {
 			i.node = nil
 			return
 		}
+		n = child
 
-		// Update to the finest granularity as the search makes progress
+		// Update watch
 		watch = n.mutateCh
 
 		// Consume the search prefix
@@ -44,9 +44,11 @@ func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 			search = search[len(n.prefix):]
 
 		} else if bytes.HasPrefix(n.prefix, search) {
+			// search is a prefix of n.prefix
 			i.node = n
 			return
 		} else {
+			// prefix doesn't match
 			i.node = nil
 			return
 		}
@@ -58,21 +60,22 @@ func (i *Iterator[T]) SeekPrefix(prefix []byte) {
 	i.SeekPrefixWatch(prefix)
 }
 
+// recurseMin traverses to the minimum (lexicographically smallest) child node.
 func (i *Iterator[T]) recurseMin(n *Node[T]) *Node[T] {
-	// Traverse to the minimum child
+	// If there's a leaf, return it.
 	if n.leaf != nil {
 		return n
 	}
-	nEdges := len(n.edges)
-	if nEdges > 1 {
-		// Add all the other edges to the stack (the min node will be added as
-		// we recurse)
+	nChildren := len(n.edges)
+	if nChildren > 1 {
+		// Add all but the first child to the stack.
+		// The first child is the minimum; we recurse into it.
 		i.stack = append(i.stack, n.edges[1:])
 	}
-	if nEdges > 0 {
-		return i.recurseMin(n.edges[0].node)
+	if nChildren > 0 {
+		return i.recurseMin(n.edges[0])
 	}
-	// Shouldn't be possible
+	// No edges means no minimum node
 	return nil
 }
 
@@ -86,7 +89,7 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	// leaf with the lower bound. Note that the iterator will still recurse into
 	// children that we don't traverse on the way to the reverse lower bound as it
 	// walks the stack.
-	i.stack = []edges[T]{}
+	i.stack = nil
 	// i.node starts off in the common case as pointing to the root node of the
 	// tree. By the time we return we have either found a lower bound and setup
 	// the stack to traverse all larger keys, or we have not and the stack and
@@ -98,17 +101,13 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	search := key
 
 	found := func(n *Node[T]) {
-		i.stack = append(
-			i.stack,
-			edges[T]{edge[T]{node: n}},
-		)
+		i.stack = append(i.stack, []*Node[T]{n})
 	}
 
 	findMin := func(n *Node[T]) {
 		n = i.recurseMin(n)
 		if n != nil {
 			found(n)
-			return
 		}
 	}
 
@@ -116,7 +115,7 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		// Compare current prefix with the search key's same-length prefix.
 		var prefixCmp int
 		if len(n.prefix) < len(search) {
-			prefixCmp = bytes.Compare(n.prefix, search[0:len(n.prefix)])
+			prefixCmp = bytes.Compare(n.prefix, search[:len(n.prefix)])
 		} else {
 			prefixCmp = bytes.Compare(n.prefix, search)
 		}
@@ -130,6 +129,7 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		}
 
 		if prefixCmp < 0 {
+			// Current prefix < search: no lower bound in this subtree
 			// Prefix is smaller than search prefix, that means there is no lower
 			// bound
 			i.node = nil
@@ -139,6 +139,7 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		// Prefix is equal, we are still heading for an exact match. If this is a
 		// leaf and an exact match we're done.
 		if n.leaf != nil && bytes.Equal(n.leaf.key, key) {
+			// Exact match
 			found(n)
 			return
 		}
@@ -157,35 +158,35 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 			return
 		}
 
-		// Otherwise, take the lower bound next edge.
+		// Find the lower bound child
 		idx, lbNode := n.getLowerBoundEdge(search[0])
 		if lbNode == nil {
+			// no child >= search[0]
 			return
 		}
 
-		// Create stack edges for the all strictly higher edges in this node.
+		// Children after lbNode are strictly greater
 		if idx+1 < len(n.edges) {
 			i.stack = append(i.stack, n.edges[idx+1:])
 		}
 
-		// Recurse
 		n = lbNode
 	}
 }
 
-// Next returns the next node in order
+// Next returns the next node in order (pre-order).
 func (i *Iterator[T]) Next() ([]byte, T, bool) {
 	var zero T
-	// Initialize our stack if needed
+	// Initialize stack if needed
 	if i.stack == nil && i.node != nil {
-		i.stack = []edges[T]{{edge[T]{node: i.node}}}
+		i.stack = append(i.stack, []*Node[T]{i.node})
 	}
 
 	for len(i.stack) > 0 {
 		// Inspect the last element of the stack
 		n := len(i.stack)
 		last := i.stack[n-1]
-		elem := last[0].node
+		elem := last[0] // Take the first node from the top slice
 
 		// Update the stack
 		if len(last) > 1 {
@@ -194,7 +195,8 @@ func (i *Iterator[T]) Next() ([]byte, T, bool) {
 			i.stack = i.stack[:n-1]
 		}
 
-		// Push the edges onto the frontier
+		// Pre-order: node first, then edges.
+		// If the node has edges, push them as a new slice to the stack.
 		if len(elem.edges) > 0 {
 			i.stack = append(i.stack, elem.edges)
 		}
@@ -204,5 +206,6 @@ func (i *Iterator[T]) Next() ([]byte, T, bool) {
 			return elem.leaf.key, elem.leaf.val, true
 		}
 	}
+
 	return nil, zero, false
 }
