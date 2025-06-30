@@ -210,7 +210,7 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 		},
 
 		// This case could panic before. it involves a node with a shared prefix and
-		// children where the reverse lower bound is greater than all the children
+		// edges where the reverse lower bound is greater than all the edges
 		{
 			[]string{"foo00", "foo11"},
 			"foo",
