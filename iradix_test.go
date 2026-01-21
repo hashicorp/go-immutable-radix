@@ -565,6 +565,86 @@ func TestWalkPrefix(t *testing.T) {
 	}
 }
 
+func TestWalkBackwardsPrefix(t *testing.T) {
+	r := New()
+
+	keys := []string{
+		"foobar",
+		"foo/bar/baz",
+		"foo/baz/bar",
+		"foo/zip/zap",
+		"zipzap",
+	}
+	for _, k := range keys {
+		r, _, _ = r.Insert([]byte(k), nil)
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	type exp struct {
+		inp string
+		out []string
+	}
+	cases := []exp{
+		{
+			"f",
+			[]string{"foo/zip/zap", "foo/baz/bar", "foo/bar/baz", "foobar"},
+		},
+		{
+			"foo",
+			[]string{"foo/zip/zap", "foo/baz/bar", "foo/bar/baz", "foobar"},
+		},
+		{
+			"foob",
+			[]string{"foobar"},
+		},
+		{
+			"foo/",
+			[]string{"foo/zip/zap", "foo/baz/bar", "foo/bar/baz"},
+		},
+		{
+			"foo/b",
+			[]string{"foo/baz/bar", "foo/bar/baz"},
+		},
+		{
+			"foo/ba",
+			[]string{"foo/baz/bar", "foo/bar/baz"},
+		},
+		{
+			"foo/bar",
+			[]string{"foo/bar/baz"},
+		},
+		{
+			"foo/bar/baz",
+			[]string{"foo/bar/baz"},
+		},
+		{
+			"foo/bar/bazoo",
+			[]string{},
+		},
+		{
+			"z",
+			[]string{"zipzap"},
+		},
+	}
+
+	root := r.Root()
+	for _, test := range cases {
+		out := []string{}
+		fn := func(k []byte, v interface{}) bool {
+			out = append(out, string(k))
+			return false
+		}
+		root.WalkBackwardsPrefix([]byte(test.inp), fn)
+		sort.Strings(out)
+		sort.Strings(test.out)
+		if !reflect.DeepEqual(out, test.out) {
+			t.Fatalf("mis-match: %v %v", out, test.out)
+		}
+	}
+}
+
 func TestWalkPath(t *testing.T) {
 	r := New[any]()
 
