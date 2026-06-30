@@ -21,6 +21,12 @@ const (
 	defaultModifiedCache = 8192
 )
 
+// Record is a key-value pair that can be inserted into the tree
+type Record struct {
+	Key   []byte
+	Value interface{}
+}
+
 // Tree implements an immutable radix tree. This can be treated as a
 // Dictionary abstract data type. The main advantage over a standard
 // hash map is prefix-based lookups and ordered iteration. The immutability
@@ -39,6 +45,18 @@ func New[T any]() *Tree[T] {
 		},
 	}
 	return t
+}
+
+// NewWithData return a new Tree initialized with the given slice of Record
+func NewWithData(data []*Record) *Tree {
+	t := New()
+	return t.initializeWithData(data)
+}
+
+func (t *Tree) initializeWithData(data []*Record) *Tree {
+	txn := t.Txn()
+	txn.initializeWithData(data)
+	return txn.Commit()
 }
 
 // Len is used to return the number of elements in the tree
@@ -77,6 +95,13 @@ type Txn[T any] struct {
 	trackChannels map[chan struct{}]struct{}
 	trackOverflow bool
 	trackMutate   bool
+}
+
+// initializeWithData is used to initialize the tree with the given data.
+func (t *Txn) initializeWithData(data []*Record) {
+	for _, record := range data {
+		t.Insert(record.Key, record.Value)
+	}
 }
 
 // Txn starts a new transaction that can be used to mutate the tree
