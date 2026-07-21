@@ -1873,3 +1873,26 @@ func TestClone(t *testing.T) {
 		t.Fatalf("bad baz in t2")
 	}
 }
+
+
+func TestSeekLowerBoundAfterMissedPrefix(t *testing.T) {
+	// SeekPrefix with no match sets node to nil; SeekLowerBound must not panic.
+	tree := New[[]byte]()
+	r := tree.Root()
+	it := r.Iterator()
+	it.SeekPrefix([]byte("a"))
+	it.SeekLowerBound([]byte("b"))
+	if k, _, ok := it.Next(); ok {
+		t.Fatalf("expected empty iterator, got key %q", k)
+	}
+
+	// Same sequence on a non-empty tree that still misses the prefix.
+	tree, _, _ = tree.Insert([]byte("foo"), []byte("1"))
+	tree, _, _ = tree.Insert([]byte("bar"), []byte("2"))
+	it = tree.Root().Iterator()
+	it.SeekPrefix([]byte("zzz"))
+	it.SeekLowerBound([]byte("a"))
+	if k, _, ok := it.Next(); ok {
+		t.Fatalf("expected empty iterator after missed prefix, got key %q", k)
+	}
+}

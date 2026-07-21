@@ -97,6 +97,12 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	i.node = nil
 	search := key
 
+	// SeekPrefixWatch can leave node nil when no edge matches the prefix.
+	// Calling SeekLowerBound afterwards must not panic (#50).
+	if n == nil {
+		return
+	}
+
 	found := func(n *Node[T]) {
 		i.stack = append(
 			i.stack,
