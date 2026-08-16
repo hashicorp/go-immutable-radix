@@ -277,6 +277,26 @@ func TestReverseIterator_SeekLowerBound(t *testing.T) {
 	}
 }
 
+func TestSeekReverseLowerBoundAfterMissedPrefix(t *testing.T) {
+	// SeekPrefixWatch sets node to nil when the prefix is missing.
+	// SeekReverseLowerBound used to panic on that nil node (issue 50).
+	r := New[any]()
+	iter := r.Root().ReverseIterator()
+	iter.SeekPrefix([]byte("a"))
+	iter.SeekReverseLowerBound([]byte("b"))
+	if key, _, ok := iter.Previous(); ok {
+		t.Fatalf("expected empty iterator, got %q", key)
+	}
+
+	r, _, _ = r.Insert([]byte("foo"), nil)
+	iter = r.Root().ReverseIterator()
+	iter.SeekPrefix([]byte("a"))
+	iter.SeekReverseLowerBound([]byte("foo"))
+	if key, _, ok := iter.Previous(); ok {
+		t.Fatalf("expected empty iterator after missed prefix, got %q", key)
+	}
+}
+
 func TestReverseIterator_SeekPrefix(t *testing.T) {
 	r := New[any]()
 	keys := []string{"001", "002", "005", "010", "100"}

@@ -95,6 +95,10 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	// up as nil so just set it here.
 	n := i.node
 	i.node = nil
+	// SeekPrefixWatch sets node to nil when the prefix is not present.
+	if n == nil {
+		return
+	}
 	search := key
 
 	found := func(n *Node[T]) {

@@ -1768,6 +1768,26 @@ func TestIterateLowerBound(t *testing.T) {
 	}
 }
 
+func TestSeekLowerBoundAfterMissedPrefix(t *testing.T) {
+	// SeekPrefixWatch sets node to nil when the prefix is missing. SeekLowerBound
+	// used to panic on that nil node (issue 50).
+	r := New[any]()
+	iter := r.Root().Iterator()
+	iter.SeekPrefix([]byte("a"))
+	iter.SeekLowerBound([]byte("b"))
+	if key, _, ok := iter.Next(); ok {
+		t.Fatalf("expected empty iterator, got %q", key)
+	}
+
+	r, _, _ = r.Insert([]byte("foo"), nil)
+	iter = r.Root().Iterator()
+	iter.SeekPrefix([]byte("a"))
+	iter.SeekLowerBound([]byte("foo"))
+	if key, _, ok := iter.Next(); ok {
+		t.Fatalf("expected empty iterator after missed prefix, got %q", key)
+	}
+}
+
 type readableString string
 
 func (s readableString) Generate(rand *rand.Rand, size int) reflect.Value {
