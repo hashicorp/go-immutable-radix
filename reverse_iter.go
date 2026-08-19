@@ -60,7 +60,6 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 	// up as nil so just set it here.
 	n := ri.i.node
 	ri.i.node = nil
-	// SeekPrefixWatch sets node to nil when the prefix is not present.
 	if n == nil {
 		return
 	}
