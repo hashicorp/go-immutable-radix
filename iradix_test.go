@@ -15,6 +15,16 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+func TestSeekLowerBoundAfterMissedPrefix(t *testing.T) {
+	tree := New[[]byte]()
+	iter := tree.Root().Iterator()
+	iter.SeekPrefix([]byte("a"))
+	iter.SeekLowerBound([]byte("b"))
+	if _, _, ok := iter.Next(); ok {
+		t.Fatal("empty tree should not yield a lower bound")
+	}
+}
+
 func CopyTree[T any](t *Tree[T]) *Tree[T] {
 	nt := &Tree[T]{
 		root: CopyNode(t.root),
