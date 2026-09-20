@@ -410,12 +410,17 @@ func (t *Txn[T]) delete(n *Node[T], search []byte) (*Node[T], *leafNode[T]) {
 func (t *Txn[T]) deletePrefix(n *Node[T], search []byte) (*Node[T], int) {
 	// Check for key exhaustion
 	if len(search) == 0 {
+		// Walk the subtree before it is emptied. If this transaction has
+		// already modified n then writeNode hands back n itself, so the
+		// clearing below would empty the very node we are about to walk,
+		// and the descendants would neither be notified nor counted.
+		numDeletions := t.trackChannelsAndCount(n)
 		nc := t.writeNode(n, true)
 		if n.isLeaf() {
 			nc.leaf = nil
 		}
 		nc.edges = nil
-		return nc, t.trackChannelsAndCount(n)
+		return nc, numDeletions
 	}
 
 	// Look for an edge
