@@ -422,6 +422,72 @@ func TestTrackMutate_DeletePrefix(t *testing.T) {
 
 }
 
+func TestTrackMutate_DeletePrefixCachedNode(t *testing.T) {
+	// This case deletes the prefix "foo/", whose node was already modified
+	// earlier in the same transaction by inserting "foo/c":
+	//
+	//    [root]                      [root]
+	//    /foo/ \zip                        \zip
+	//  [node]  (zip)                       (zip)
+	//  a/ |b \c  <- this node is in the
+	// (a)(b) (c)   writable cache already
+	//
+	// writeNode hands such a node back as-is, so the watches below it must
+	// be collected, and its leaves counted, before the node is emptied.
+	for i := 0; i < 3; i++ {
+		r := New[any]()
+		r, _, _ = r.Insert([]byte("foo/a"), nil)
+		r, _, _ = r.Insert([]byte("foo/b"), nil)
+		r, _, _ = r.Insert([]byte("zip"), nil)
+
+		nodeWatch1, _, _ := r.Root().GetWatch([]byte("foo/a"))
+		nodeWatch2, _, _ := r.Root().GetWatch([]byte("foo/b"))
+		unknownNodeWatch, _, _ := r.Root().GetWatch([]byte("zip"))
+
+		txn := r.Txn()
+		txn.TrackMutate(true)
+		txn.Insert([]byte("foo/c"), nil)
+		if ok := txn.DeletePrefix([]byte("foo/")); !ok {
+			t.Fatalf("Expected delete prefix to return true")
+		}
+		switch i {
+		case 0:
+			r = txn.Commit()
+		case 1:
+			r = txn.CommitOnly()
+			txn.Notify()
+		default:
+			r = txn.CommitOnly()
+			txn.slowNotify()
+		}
+
+		// Both keys were removed, so both of their watches must fire, and
+		// the key outside the prefix must be left alone.
+		select {
+		case <-nodeWatch1:
+		default:
+			t.Fatalf("node watch was not triggered")
+		}
+		select {
+		case <-nodeWatch2:
+		default:
+			t.Fatalf("node watch was not triggered")
+		}
+		select {
+		case <-unknownNodeWatch:
+			t.Fatalf("Unrelated node watch was triggered during a prefix delete")
+		default:
+		}
+
+		// The three keys under the prefix are gone, so they must not be
+		// counted any more.
+		verifyTree(t, []string{"zip"}, r)
+		if r.Len() != 1 {
+			t.Fatalf("bad len: %v %v", r.Len(), 1)
+		}
+	}
+}
+
 func verifyTree[T any](t *testing.T, expected []string, r *Tree[T]) {
 	root := r.Root()
 	var out []string
