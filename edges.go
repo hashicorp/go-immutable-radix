@@ -3,22 +3,45 @@
 
 package iradix
 
-import "sort"
+type edgeBitMap [4]uint64
 
-type edges[T any] []edge[T]
+// setBit sets the bit for a given label
+func (bm *edgeBitMap) setBit(label byte) {
+	// Determine which block the label falls into by shifting 6 bits to the right.
+	// This is the equivalent of dividing by 64.
+	block := label >> 6
 
-func (e edges[T]) Len() int {
-	return len(e)
+	// Since the block captures the two high order bits, we do an AND with the lower 6 bits (0x00111111 == 63)
+	// to determine which bit to check within the selected block.
+	bitPos := label & 63
+
+	// To set a ith bit at the block, we do a OR(|) operation with 1 << i
+	// Left shifting 1 with i, we get a number having 1 at only ith bit
+	// all other bits are 0.
+	bm[block] |= 1 << bitPos
 }
 
-func (e edges[T]) Less(i, j int) bool {
-	return e[i].label < e[j].label
+// clearBit clears the bit for a given label
+func (bm *edgeBitMap) clearBit(label byte) {
+	// Determine which block the label falls into by shifting 6 bits to the right.
+	// This is the equivalent of dividing by 64.
+	block := label >> 6
+
+	// Since the block captures the two high order bits, we do an AND with the lower 6 bits (0x00111111 == 63)
+	// to determine which bit to check within the selected block.
+	bitPos := label & 63
+	mask := uint64(1) << bitPos
+	bm[block] &^= mask
 }
 
-func (e edges[T]) Swap(i, j int) {
-	e[i], e[j] = e[j], e[i]
-}
+// bitSet checks if bit for label is set
+func (bm *edgeBitMap) hasBitSet(label byte) bool {
+	// Determine which block the label falls into by shifting 6 bits to the right.
+	// This is the equivalent of dividing by 64.
+	block := label >> 6
 
-func (e edges[T]) Sort() {
-	sort.Sort(e)
+	// Since the block captures the two high order bits, we do an AND with the lower 6 bits (0x00111111 == 63)
+	// to determine which bit to check within the selected block.
+	bitPos := label & 63
+	return (bm[block] & (1 << bitPos)) != 0
 }
