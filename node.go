@@ -215,7 +215,7 @@ func (n *Node[T]) Maximum() ([]byte, T, bool) {
 // Iterator is used to return an iterator at
 // the given node to walk the tree
 func (n *Node[T]) Iterator() *Iterator[T] {
-	return &Iterator[T]{node: n}
+	return &Iterator[T]{node: n, origin: n}
 }
 
 // ReverseIterator is used to return an iterator at

@@ -26,19 +26,23 @@ type ReverseIterator[T any] struct {
 // NewReverseIterator returns a new ReverseIterator at a node
 func NewReverseIterator[T any](n *Node[T]) *ReverseIterator[T] {
 	return &ReverseIterator[T]{
-		i: &Iterator[T]{node: n},
+		i: &Iterator[T]{node: n, origin: n},
 	}
 }
 
 // SeekPrefixWatch is used to seek the iterator to a given prefix
 // and returns the watch channel of the finest granularity
 func (ri *ReverseIterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
+	// A fresh seek discards the iteration state of any previous seek: stale
+	// "expanded" marks would suppress child expansion below nodes the new
+	// seek pushes without pre-expanding them.
+	ri.expandedParents = nil
 	return ri.i.SeekPrefixWatch(prefix)
 }
 
 // SeekPrefix is used to seek the iterator to a given prefix
 func (ri *ReverseIterator[T]) SeekPrefix(prefix []byte) {
-	ri.i.SeekPrefixWatch(prefix)
+	ri.SeekPrefixWatch(prefix)
 }
 
 // SeekReverseLowerBound is used to seek the iterator to the largest key that is
@@ -52,13 +56,17 @@ func (ri *ReverseIterator[T]) SeekReverseLowerBound(key []byte) {
 	// children that we don't traverse on the way to the reverse lower bound as it
 	// walks the stack.
 	ri.i.stack = []edges[T]{}
-	// ri.i.node starts off in the common case as pointing to the root node of the
-	// tree. By the time we return we have either found a lower bound and setup
-	// the stack to traverse all larger keys, or we have not and the stack and
-	// node should both be nil to prevent the iterator from assuming it is just
-	// iterating the whole tree from the root node. Either way this needs to end
-	// up as nil so just set it here.
-	n := ri.i.node
+	// A fresh seek discards the iteration state of any previous seek, including
+	// the stale "expanded" marks: they referred to the stack that was just
+	// wiped and would suppress child expansion below nodes this seek pushes
+	// without pre-expanding them.
+	ri.expandedParents = nil
+	// ri.i.origin always still points at the node the iterator was created at
+	// (in the common case the root of the tree), so a seek can be repeated:
+	// by the time we return we have either found a reverse lower bound and
+	// setup the stack to traverse all smaller keys, or nothing matched and the
+	// empty stack makes Previous yield nothing. node is left nil either way.
+	n := ri.i.origin
 	ri.i.node = nil
 	search := key
 

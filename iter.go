@@ -10,6 +10,12 @@ import (
 // Iterator is used to iterate over a set of nodes
 // in pre-order
 type Iterator[T any] struct {
+	// origin is the node the iterator was created at. Every seek starts from
+	// it, whatever a previous seek did to node, so an iterator can be seeked
+	// again any number of times.
+	origin *Node[T]
+	// node tracks the position the last seek left the iterator at: the node
+	// a hit SeekPrefix narrowed it to, or nil when nothing is left to iterate.
 	node  *Node[T]
 	stack []edges[T]
 }
@@ -19,7 +25,9 @@ type Iterator[T any] struct {
 func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	// Wipe the stack
 	i.stack = nil
-	n := i.node
+	// Seeks always restart from the node the iterator was created at, not
+	// from wherever a previous seek stopped.
+	n := i.origin
 	watch = n.mutateCh
 	search := prefix
 	for {
@@ -87,13 +95,12 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	// children that we don't traverse on the way to the reverse lower bound as it
 	// walks the stack.
 	i.stack = []edges[T]{}
-	// i.node starts off in the common case as pointing to the root node of the
-	// tree. By the time we return we have either found a lower bound and setup
-	// the stack to traverse all larger keys, or we have not and the stack and
-	// node should both be nil to prevent the iterator from assuming it is just
-	// iterating the whole tree from the root node. Either way this needs to end
-	// up as nil so just set it here.
-	n := i.node
+	// i.origin always still points at the node the iterator was created at
+	// (in the common case the root of the tree), so a seek can be repeated:
+	// by the time we return we have either found a lower bound and setup the
+	// stack to traverse all larger keys, or nothing matched and the empty
+	// stack makes Next yield nothing. node is left nil either way.
+	n := i.origin
 	i.node = nil
 	search := key
 
@@ -132,7 +139,6 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 		if prefixCmp < 0 {
 			// Prefix is smaller than search prefix, that means there is no lower
 			// bound
-			i.node = nil
 			return
 		}
 
