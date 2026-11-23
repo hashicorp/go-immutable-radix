@@ -278,6 +278,36 @@ func (n *Node[T]) WalkPrefix(prefix []byte, fn WalkFn[T]) {
 	}
 }
 
+// WalkBackwardsPrefix is used to walk the tree under a prefix in reverse order
+func (n *Node) WalkBackwardsPrefix(prefix []byte, fn WalkFn) {
+	search := prefix
+	for {
+		// Check for key exhaution
+		if len(search) == 0 {
+			reverseRecursiveWalk(n, fn)
+			return
+		}
+
+		// Look for an edge
+		_, n = n.getEdge(search[0])
+		if n == nil {
+			break
+		}
+
+		// Consume the search prefix
+		if bytes.HasPrefix(search, n.prefix) {
+			search = search[len(n.prefix):]
+
+		} else if bytes.HasPrefix(n.prefix, search) {
+			// Child may be under our search prefix
+			reverseRecursiveWalk(n, fn)
+			return
+		} else {
+			break
+		}
+	}
+}
+
 // WalkPath is used to walk the tree, but only visiting nodes
 // from the root down to a given leaf. Where WalkPrefix walks
 // all the entries *under* the given prefix, this walks the
