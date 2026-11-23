@@ -95,6 +95,9 @@ func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	// up as nil so just set it here.
 	n := i.node
 	i.node = nil
+	if n == nil {
+		return
+	}
 	search := key
 
 	found := func(n *Node[T]) {
