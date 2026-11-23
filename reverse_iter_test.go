@@ -362,3 +362,46 @@ func TestReverseIterator_Previous(t *testing.T) {
 		}
 	}
 }
+
+func TestReverseIterator_SeekAgain(t *testing.T) {
+	buildTree := func() *Tree[[]byte] {
+		tree := New[[]byte]()
+		for _, k := range []string{"ab", "abc", "ad", "b", "bc", "c"} {
+			tree, _, _ = tree.Insert([]byte(k), []byte(k))
+		}
+		return tree
+	}
+
+	expectPrevious := func(t *testing.T, it *ReverseIterator[[]byte], want string, step string) {
+		t.Helper()
+		k, _, ok := it.Previous()
+		if !ok || string(k) != want {
+			t.Errorf("%s: Previous = (%q, %v), want %q", step, k, ok, want)
+		}
+	}
+
+	// a missed SeekReverseLowerBound must not poison the next seek
+	rit := buildTree().Root().ReverseIterator()
+	rit.SeekReverseLowerBound([]byte("a"))
+	rit.SeekReverseLowerBound([]byte("b"))
+	expectPrevious(t, rit, "b", "SeekReverseLowerBound after missed SeekReverseLowerBound")
+
+	// SeekPrefix and SeekReverseLowerBound interleave
+	rit = buildTree().Root().ReverseIterator()
+	rit.SeekPrefix([]byte("ab"))
+	expectPrevious(t, rit, "abc", "reverse SeekPrefix hit")
+	rit.SeekReverseLowerBound([]byte("b"))
+	expectPrevious(t, rit, "b", "SeekReverseLowerBound after SeekPrefix")
+
+	// a seek runs from the creation node, not from a narrowed node, and a
+	// SeekReverseLowerBound must not poison a later SeekPrefix
+	rit = buildTree().Root().ReverseIterator()
+	rit.SeekPrefix([]byte("ab"))
+	expectPrevious(t, rit, "abc", "reverse SeekPrefix hit")
+	rit.SeekReverseLowerBound([]byte("ad"))
+	expectPrevious(t, rit, "ad", "SeekReverseLowerBound searches from the creation node")
+	rit.SeekPrefix([]byte("b"))
+	expectPrevious(t, rit, "bc", "SeekPrefix after SeekReverseLowerBound")
+	rit.SeekReverseLowerBound([]byte("b"))
+	expectPrevious(t, rit, "b", "SeekReverseLowerBound after SeekPrefix")
+}

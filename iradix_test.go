@@ -1873,3 +1873,48 @@ func TestClone(t *testing.T) {
 		t.Fatalf("bad baz in t2")
 	}
 }
+
+func TestIterator_SeekAgain(t *testing.T) {
+	buildTree := func() *Tree[[]byte] {
+		tree := New[[]byte]()
+		for _, k := range []string{"ab", "abc", "ad", "b", "bc", "c"} {
+			tree, _, _ = tree.Insert([]byte(k), []byte(k))
+		}
+		return tree
+	}
+
+	expectNext := func(t *testing.T, it *Iterator[[]byte], want string, step string) {
+		t.Helper()
+		k, _, ok := it.Next()
+		if !ok || string(k) != want {
+			t.Errorf("%s: Next = (%q, %v), want %q", step, k, ok, want)
+		}
+	}
+
+	// a missed SeekPrefix must not poison the next seek
+	it := buildTree().Root().Iterator()
+	it.SeekPrefix([]byte("zz"))
+	it.SeekLowerBound([]byte("b"))
+	expectNext(t, it, "b", "SeekLowerBound after missed SeekPrefix")
+
+	// a successful SeekLowerBound must not poison the next seek
+	it = buildTree().Root().Iterator()
+	it.SeekLowerBound([]byte("b"))
+	it.SeekPrefix([]byte("a"))
+	expectNext(t, it, "ab", "SeekPrefix after successful SeekLowerBound")
+	it.SeekLowerBound([]byte("c"))
+	expectNext(t, it, "c", "SeekLowerBound after SeekPrefix")
+
+	// a missed SeekLowerBound must not poison the next seek
+	it = buildTree().Root().Iterator()
+	it.SeekLowerBound([]byte("zz"))
+	it.SeekLowerBound([]byte("a"))
+	expectNext(t, it, "ab", "SeekLowerBound after missed SeekLowerBound")
+
+	// a seek runs from the creation node, not from a narrowed node
+	it = buildTree().Root().Iterator()
+	it.SeekPrefix([]byte("ab"))
+	expectNext(t, it, "ab", "SeekPrefix hit")
+	it.SeekLowerBound([]byte("ad"))
+	expectNext(t, it, "ad", "SeekLowerBound searches from the creation node")
+}
